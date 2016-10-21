@@ -1,120 +1,91 @@
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
 
+const END_CHAR: char = '$';
+const FALSE_S: char = 'Ś';
 
 type Terminal = char;
 type TerminalSet = BTreeSet<Terminal>;
 type NonTerminal = char;
 type NonTerminalSet = BTreeSet<NonTerminal>;
 
-#[derive(Clone, Debug)]
-enum V {
-    T(Terminal),
-    N(NonTerminal),
-    Lambda,
-}
+type Derivation = String;
+type Production = (NonTerminal, Derivation);
+type Productions = Vec<Production>;
 
-type Derivation = Vec<V>;
-type DerivationVec = Vec<Derivation>;
-
-type Production<T> = (NonTerminal, T);
-type Productions<T> = Vec<Production<T>>;
-type ProductionsMap = BTreeMap<NonTerminal, DerivationVec>;
+type ProductionIndex = u32;
+type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
 
 type DotIndex = u32;
-// TODO: use this knew, less naive, data structure instead
-// TODO: create print traits for Item
-type Item = (NonTerminal, Derivation, DotIndex);
+type DerefedItem = (ProductionIndex, NonTerminal, Derivation, DotIndex, String);
+type Item = (ProductionIndex, DotIndex);
 type Items = BTreeSet<Item>;
+
+type ActionMatrix = BTreeMap::new::<(Items, String), Action>;
+
+
+#[derive(Clone, Debug)]
+enum Action {
+    Shift(Items),
+    Reduce(ProductionIndex),
+    Accept,
+    Error,
+    Next,
+}
 
 #[derive(Clone, Debug)]
 struct CFG {
     vn: NonTerminalSet,
     vt: TerminalSet,
-    p: ProductionsMap,
+    prod_map: ProductionMap,
+    prod_vec: Productions,
     s: NonTerminal,
 }
 
 
 impl CFG {
-    pub fn new<T: Into<String> + fmt::Debug>(vn: NonTerminalSet, vt: TerminalSet, p: Productions<T>, s: NonTerminal) -> CFG {
-        let mut p_map: ProductionsMap = BTreeMap::new();
+    pub fn new<T: Into<String> + fmt::Debug>(vn: NonTerminalSet, vt: TerminalSet, p: Productions, s: NonTerminal) -> CFG {
+        let mut prod_map: ProductionMap = BTreeMap::new();
+        let mut prod_vec: Production = p;
 
-        if !vn.is_disjoint(&vt) {
-            panic!("VN and VT must be disjoint.\nVN: {:?} \nVT: {:?}", vn, vt);
-        }
+        // Insert the dummy production
+        prod_vec.insert(0, (FALSE_S, format!("{}{}", s, END_CHAR)) );
 
-        for (nt, der_str) in p {
-            if !vn.contains(&nt) {
-                panic!("NonTerminal in production rule does not belong to VN {:?} -> {:?} \n {:?}", nt, der_str, vn);
+        assert!(!vn.contains(&FALSE_S), "{} is a special VN and cannot be used", FALSE_S);
+        assert!(!vt.contains(&END_CHAR), "{} is a special VT and cannot be used", FALSE_S);
+
+        vn.insert(FALSE_S);
+        vt.insert(END_CHAR);
+
+        assert!(!vn.is_disjoint(&vt), "VN and VT must be disjoint.\nVN: {:?} \nVT: {:?}", vn, vt);
+
+        let len = prod_vec.len();
+
+        for i in 0..len {
+            let (nt, derivation) = prod_vec[i]
+            assert!(!vn.contains(&nt), "NonTerminal in production rule does not belong to VN {:?} -> {:?} \n {:?}", nt, der_str, vn);
+            for c in derivation.chars() {
+                assert!(vn.contains(c) || vt.contains(c), "Char in derivation {:?} -> {:?} does not belong to VN or VT {:?}", nt, derivation, c);
             }
 
-            let dervec = p_map.entry(nt).or_insert(vec!());
-
-            let mut der: Derivation = vec!();
-
-            let der_string = der_str.into();
-
-            if der_string.len() == 0 {
-                der.push(V::Lambda);
-            }
-
-            for c in der_string.chars() {
-                if vn.contains(&c) {
-                    der.push( V::N(c.clone()) );
-                    continue
-                }
-
-                if vt.contains(&c) {
-                    der.push( V::T(c.clone()) );
-                    continue
-                }
-
-                panic!("Char in derivation {:?} -> {:?} does not belong to VN or VT {:?}", nt, der_string, c);
-            }
-
-            dervec.push(der);
+            prod_map.entry(nt).or_insert(vec!()).push( i );
         }
 
         CFG {
             vn: vn,
             vt: vt,
-            p: p_map,
-            s: s,
+            prod_map: prod_map,
+            prod_vec: prod_vec,
+            s: FALSE_S,
         }
     }
 
-    //pub fn get_nt_derivations(&self, nt: &NonTerminal) -> DerivationVec {
-        ////TODO: optimize the case where the nt is not found
-        //self.p.get(nt).unwrap().clone()
-    //}
-    
-    pub fn get_items(&self) -> Items {
-        let mut items = BTresSet::new();
-        for (nt, derVec) in self.p.iter() {
-            for der in derVec {
-                let len = der.len();
-                for index in 0..len {
-                    items.insert( ( nt.clone(), item, index) );
-                }
-            }
-        }
-
-        items
-    }
-
-    // TODO a method to iterate over productions easily
-    // maybe implement the Iter trait?
-    //
-    //
-    //
-    //
     pub fn closure(&self, items: &Items) -> Items {
         let mut closure = items.clone();
-        let mut marked = BTreeSet::new();
+        let mut marked = set!();
 
-
-        while (marked != non_terminal_items(closure)) {
+        while (marked != self.non_terminal_items(closure)) {
+            // FIXME something like closure.clone().difference(&marked) shoudl replace the 4 lines below
             for item in clousure.cloned() {
                 if (marked.contains(item)) {
                     continue;
@@ -124,66 +95,172 @@ impl CFG {
 
                 // In here we should have productions of the form
                 // A -> a.Bb
-                let (_, derivation, dot_index) = item;
-                let nt = derivation[dot_index + 1];
+                let (_, nt, derivation, _, right_symbol) = self.deref_item(&item);
 
-                // TODO: use something like assert here
-                if (!self.vn.contains(nt)) {
-                    panic!("Ups something went wrong. Expected {} to be a NonTerminal", nt);
-                }
-
+                assert!(self.vn.contains(right_symbol), "Ups something went wrong. Expected {} to be a NonTerminal", right_symbol);
 
                 // add all productions of the form
                 // B -> any
-                let dervec = self.p.get(&nt);
-                for der in dervec {
-                    closure.insert(( nt.clone(), der, 0));
+                if let Some(prod_indices) = self.prod_map.get(&right_symbol) {
+                    for prod_index in prod_indices {
+                        let derivation = self.prod_vec[prod_index];
+                        closure.insert( ( prod_index, 0) );
+                    }
                 }
             }
         }
-
 
 
         closure
     }
 
-    pub fn goto(&self, items: &Items, x: V) -> Items {
-        let ret_items = BTreeSet::new();
+    pub fn goto(&self, items: &Items, x: char) -> Items {
+        let ret_items = set!();
 
         for item in items {
-            let (nt, derivation, dot_index) = item;
-            let right_symbol = derivation[dot_index + 1];
+            let (prod_index, nt, derivation, dot_index, right_symbol) = self.deref_item(&item);
             if (right_symbol != x) {
-                continue;
+                continue
             }
 
-            ret_items.insert( (nt, derivation, dot_index + 1) );
+            ret_items.insert( (prod_index, dot_index + 1) );
         }
 
         self.closure( &ret_items )
     }
 
-    pub fn get_automata_items(&self) -> Items {
-    
-    }
+    pub fn get_items_set(&self) -> BTreeSet<Items> {
+        let v = self.vt.union(&self.vn);
+        let q0 = self.closure( (0, 0 ) );
 
-    pub fn to_lr0_matrix() {
-    
-    }
-}
+        let mut k = set!(q0);
+        let mut marked = set!();
 
 
+        while (k != marked) {
+            for i in k.iter().cloned() {
+                if marked.contains(i) {
+                    continue;
+                }
 
-pub fn non_terminal_items(items: &Items) -> Items {
-    items.iter().filter(| item | {
-        let (_, derivation, dot_index) = item;
+                marked.insert(i);
 
-        match derivation[dot_index + 1] {
-            V::N(_) => return true;
-            _ => return false
+                for x in v {
+                    let j = self.goto(i, x);
+
+                    if !j.is_empty() {
+                        k.insert(j);
+                    }
+                }
+            }
         }
-    })
+
+        k
+    }
+
+    pub fn non_terminal_items(&self, items: &Items) -> Items {
+        items.iter().filter(| item | {
+            let (_, _, derivation, _, right_symbol) = self.deref_item(&item);
+
+            if self.vn.contains(&right_symbol) {
+                true
+            }
+
+            false
+        })
+        .collect()
+    }
+
+
+
+    pub fn get_complete_item(&self, items: &Items) -> Option<Item> {
+        for item in items {
+            let (_, _, derivation, dot_index, _) = self.deref_item(&item);
+            if derivation.len() == dot_index + 1 {
+                Some(item.clone())
+            }
+        }
+
+        None
+    }
+
+    pub fn has_end_item(&self, items: &Items) -> bool {
+        let has_end = items.iter().find(| item | {
+            let (_, nt, derivation, _, right_symbol) = self.deref_item(&item);
+            if (nt == FALSE_S && right_symbol == END_CHAR) {
+                return true;
+            }
+
+            return false;
+        })
+
+        match has_end {
+            Some(_) => true,
+            None => false
+        }
+    }
+
+
+    pub fn deref_item(&self, item: &Item) -> DerefedItem {
+        let (prod_index, dot_index) = item;
+        let (nt, derivation) = self.prod_vec[prod_index];
+        let right_symbol = derivation[dot_index];
+
+        (prod_index, nt, derivation, dot_index, right_symbol)
+    }
+
+    pub fn get_action_matrix() -> ActionMatrix{
+        let v = self.vt.union(&self.vn);
+        let mut action: ActionMatrix = BTreeMap::new();
+        let k_items = self.get_items_set();
+
+        // Items might be called state?
+        for x in v {
+            for items in k_items {
+                let key = (items.clone(), x);
+                let next_items = self.goto(items, x);
+                if !next_items.is_empty() {
+                    if self.vn.contains(&x) {
+                        action.insert(key, Action::Next(next_items));
+                        continue;
+                    }
+                    if self.vt.contains(&x) {
+                        action.insert(key, Action::Shift(next_items));
+                        continue;
+                    }
+                }
+
+                if let Some(item) = self.get_complete_item(items) {
+                    let (prod_index, nt, derivation, dot_index, right_symbol) = self.deref_item(&item);
+                    if nt != FALSE_S {
+                        action.insert(key, Action::Reduce(prod_index));
+                        continue;
+                    }
+                }
+
+                if self.has_end_item(items) && x == END_CHAR {
+                    action.insert(key, Action::Accept);
+                    continue;
+                }
+
+                action.insert(key, Action::Error);
+            }
+        }
+
+
+        action
+    }
+
+
+    pub fn lr0_analyse(&self, chain: String) {
+        let mut pointer = 0;
+        let mut stack = 0;
+    
+    }
 }
+
+
+
 
 
 // TODO this should probably go directly to the shitf-reduce table instead of ging to to the afd
