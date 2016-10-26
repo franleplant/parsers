@@ -34,5 +34,7 @@ fn expressions_grammar() {
 
 
     assert!(!parser.parse("i*".to_string()));
+    assert!(!parser.parse("iiiii".to_string()));
+    assert!(!parser.parse("i*****".to_string()));
 }
 

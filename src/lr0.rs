@@ -268,6 +268,27 @@ impl LR0 {
         Action::Error
     }
 
+    // TODO to have even better error reporting I could calculate something like
+    // primeros(NT) and display those as expected symbols
+    // but I don't konw if it's going to be useful since in a real grammar those could be
+    // pretty big, and compilers tend to tell you unexpected token, or expression expected
+    // for what I don;t know how to do
+    // Probably this should push a BTreeSet to avoid duplicates
+    fn expected_symbols(&self, state: &State) -> BTreeSet<char> {
+        let v = self.grammar.get_v();
+
+        v.iter()
+            .map(| &x | (x, self.action_matrix.get( &(state.clone(), x) ).unwrap()) )
+            .filter(| &(_, action) | {
+                match *action {
+                    Action::Error => false,
+                    _ => true
+                }
+            })
+            .map(| (x, _) | x)
+            .collect()
+    }
+
     // TODO we should have in account reduction redution or shift reduction
     // conflicts in this matrix as in lr1 g
     pub fn calc_action_matrix(&self) -> ActionMatrix{
@@ -302,6 +323,17 @@ impl LR0 {
     }
 
 
+    // TODO this should return a Result with proper error reporting
+    // - Ok((derivations, stack, et al?))
+    // - Err((derivations, stack, position_in_chain, expected message?, et al))
+    // TODO probably this function should be private and called something like validate_chain
+    // and should return a bool
+    // and then a top level public function called parse should do stuff with that boolean result
+    // checking the stack and the position in the chain (LR0 should have a index field)
+    // and asemble all the information to be returned to the user
+    // this is likely necessary to simplify the out points of the existing parse,
+    // perhaps we could accomplish the same with smart `break` and single out point for the whole
+    // function
     pub fn parse(&mut self, w: String) -> bool {
         let mut state_names = BTreeMap::new();
         let ref k = self.k;
@@ -310,6 +342,7 @@ impl LR0 {
             state_names.insert(state.clone(), format!("q{}", i));
         }
 
+        let mut derivations = vec!();
         self.stack = vec!(StackSymbol::State(self.q0.clone()));
 
         let chain: Vec<char> = format!("{}{}", w, END_CHAR).chars().collect();
@@ -319,11 +352,11 @@ impl LR0 {
             let stack_top = self.stacktop_state();
 
             let tc = chain[index];
-            println!("stack {:?}", self.stack);
-            println!("tc {:?}", tc);
+            //println!("stack {:?}", self.stack);
+            //println!("tc {:?}", tc);
             let action = self.action_matrix.get( &(stack_top.clone(), tc) ).unwrap();
-            println!("action {:?}", action);
-            println!("====");
+            //println!("action {:?}", action);
+            //println!("====");
 
             match *action {
                 Action::Shift(ref q) => {
@@ -354,23 +387,58 @@ impl LR0 {
                     let next_action = self.action_matrix.get( &(stack_top, nt) ).expect("no null goto transitions");
                     let q = match *next_action {
                         Action::Shift(ref q) => q.clone(),
+                        // TODO should this be a rejected scenario?
                         _ => panic!("Expected Action::Shift but found {:?}", next_action),
                     };
 
                     self.stack.push(StackSymbol::State(q.clone()));
-                    println!("Reducing by {:?} -> {:?}", nt, derivation);
+                    derivations.push( (nt, derivation) );
                 },
                 Action::Accept => {
+                    println!("Accepted {}", w);
+                    for (nt, derivation) in derivations {
+                        println!("Reducing by {:?} -> {:?}", nt, derivation);
+                    }
                     // Later we shuld return something more meaninful
                     return true;
                 },
                 Action::Error => {
+                    println!("Parse Error {:?}, {}", self.stack, w);
+                    //let r_stack: Stack = self.stack.iter().cloned().filter(| symbol | {
+                        //match *symbol {
+                            //StackSymbol::VN(_) => true,
+                            //StackSymbol::VT(_) => true,
+                            //_ => false,
+                        //}
+                    //}).collect();
+
+                    //println!("REDUCED STACK {:?}", r_stack);
+
+                    let len = self.stack.len();
+                    for i in (0..len).rev() {
+                        //println!("navigating stack {:?}", self.stack[i]);
+                        if let StackSymbol::State(ref state) = self.stack[i] {
+                            println!("expected {:?} found {:?} in {}", self.expected_symbols(&state), tc, w);
+                            break
+                        }
+                    }
+                    // In here we can grab the for example ( S and search for right hand side
+                    // derivations inside productions that start or contains perhaps that and
+                    // basing on that we can do something like "expected ) found nothing"
+
+                    for (nt, derivation) in derivations {
+                        println!("Reducing by {:?} -> {:?}", nt, derivation);
+                    }
                     //TODO better error reporting
                     return false;
                 }
             }
         }
 
+        println!("Parse Error {:?}, {}", self.stack, w);
+        for (nt, derivation) in derivations {
+            println!("Reducing by {:?} -> {:?}", nt, derivation);
+        }
         false
     }
 }
@@ -411,12 +479,8 @@ mod tests {
 
         let k_expected = set!(q0.clone(), q1.clone(), q2.clone(), q3.clone(), q4.clone(), q5.clone());
 
-        //println!("K {:?}", k);
-        //println!("K {:?}", k_expected);
         assert_eq!(k, k_expected, "should assemble the right state set");
 
-        println!("MOFO {:?}", m);
-        println!("MOFO2 {:?}, {:?}", q0, m.get( &(q0.clone(), '(')) );
         assert_eq!(*m.get( &(q0.clone(), '(')).unwrap(), Action::Shift(q2.clone()));
         assert_eq!(*m.get( &(q0.clone(), 'a')).unwrap(), Action::Shift(q3.clone()));
         assert_eq!(*m.get( &(q0.clone(), ')')).unwrap(), Action::Error);
