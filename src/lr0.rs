@@ -16,9 +16,6 @@ const FALSE_S: char = 'Ś';
 
 type Terminal = char;
 type TerminalSet = BTreeSet<Terminal>;
-// TODO make nonterminal a string, this will require some changes
-// with terminal and deriviation
-// TODO: reconsider this since we can create a map from chars to proper names
 type NonTerminal = char;
 type NonTerminalSet = BTreeSet<NonTerminal>;
 
@@ -100,7 +97,7 @@ impl LR0 {
         parser
     }
 
-    pub fn closure(&self, items: &Items) -> Items {
+    pub fn closure(&self, items: &State) -> State {
         let mut closure = items.clone();
         let mut marked = set!();
 
@@ -134,7 +131,7 @@ impl LR0 {
         closure
     }
 
-    fn goto(&self, items: &Items, x: char) -> Items {
+    fn goto(&self, items: &State, x: char) -> State {
         let mut ret_items = set!();
 
         for item in items {
@@ -245,6 +242,17 @@ impl LR0 {
         (prod_index, nt, derivation.clone(), dot_index, right_symbol)
     }
 
+    fn stacktop(&self) -> StackSymbol {
+        self.stack[self.stack.len() - 1].clone()
+    }
+
+    fn stacktop_state(&self) -> State {
+        match self.stacktop() {
+            StackSymbol::State(state) => state.clone(),
+            _ => panic!("Ouch error"),
+        }
+    }
+
 
     fn next_action(&self, state: State, x: char, next_state: State) -> Action {
         if self.is_accept_state(&state) && x == END_CHAR {
@@ -299,41 +307,26 @@ impl LR0 {
     }
 
 
-    pub fn parse(&mut self, chain: String) -> bool {
+    pub fn parse(&mut self, w: String) -> bool {
         let mut state_names = BTreeMap::new();
         let ref k = self.k;
         let iter = k.iter().enumerate();
-        for (i, state) in  iter {
+        for (i, state) in iter {
             state_names.insert(state.clone(), format!("q{}", i));
         }
 
-        println!("TEST {:?}", state_names);
+        self.stack = vec!(StackSymbol::State(self.q0.clone()));
 
-        let ref q0 = self.q0;
-        self.stack = vec!(StackSymbol::State(q0.clone()));
-        // TODO figure out how to cache goto inside the action matrix
-        let ref action_matrix = self.action_matrix;
-
-        let chain = {
-            let mut vec: Vec<char> = chain.chars().collect();
-            vec.push(END_CHAR);
-            vec
-        };
+        let chain: Vec<char> = format!("{}{}", w, END_CHAR).chars().collect();
 
         let mut index = 0;
         while index < chain.len() {
-            let stack_top = self.stack[self.stack.len() - 1].clone();
-
-            // TODO better abstract the way we handle the stack
-            let stack_top = match stack_top {
-                StackSymbol::State(state) => state,
-                _ => panic!("Ouch error"),
-            };
+            let stack_top = self.stacktop_state();
 
             let tc = chain[index];
             println!("stack {:?}", self.stack);
             println!("tc {:?}", tc);
-            let action = action_matrix.get( &(stack_top.clone(), tc) ).unwrap();
+            let action = self.action_matrix.get( &(stack_top.clone(), tc) ).unwrap();
             println!("action {:?}", action);
             println!("====");
 
@@ -359,16 +352,11 @@ impl LR0 {
                         }
                     }
 
-
-                    let stack_top = self.stack[self.stack.len() - 1].clone();
-                    let stack_top = match stack_top {
-                        StackSymbol::State(state) => state,
-                        _ => panic!("Ouch error"),
-                    };
+                    let stack_top = self.stacktop_state();
 
                     self.stack.push(StackSymbol::VN(nt));
 
-                    let next_action = action_matrix.get( &(stack_top, nt) ).expect("no null goto transitions");
+                    let next_action = self.action_matrix.get( &(stack_top, nt) ).expect("no null goto transitions");
                     let q = match *next_action {
                         Action::Shift(ref q) => q.clone(),
                         _ => panic!("Expected Action::Shift but found {:?}", next_action),
@@ -479,61 +467,3 @@ mod tests {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-        //let q0 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((0, 0));
-            //aux.insert((1, 0));
-            //aux.insert((2, 0));
-            //aux
-        //};
-
-
-        //let q1 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((0, 1));
-            //aux
-        //};
-
-        //let q2 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 0));
-            //aux.insert((1, 1));
-            //aux.insert((2, 0));
-            //aux
-        //};
-
-        //let q3 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((2, 1));
-            //aux
-        //};
-
-        //let q4 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 2));
-            //aux
-        //};
-
-        //let q5 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 3));
-            //aux
-        //};
