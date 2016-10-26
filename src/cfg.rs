@@ -1,6 +1,18 @@
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
 
+//TODO
+// - decouple CFG from the parser itself
+// - improve parser data structures and helper methods such as stack
+//      and items, we need a proper interface for derefing and printing
+//      and manipulating them in general
+// - improve performance by only calculating the matrix once
+// - improve performance by only calculating goto once?
+// - more tests with different grammars
+//
+//
+//
+
 const END_CHAR: char = '$';
 const FALSE_S: char = 'Ś';
 
@@ -8,6 +20,7 @@ type Terminal = char;
 type TerminalSet = BTreeSet<Terminal>;
 // TODO make nonterminal a string, this will require some changes
 // with terminal and deriviation
+// TODO: reconsider this since we can create a map from chars to proper names
 type NonTerminal = char;
 type NonTerminalSet = BTreeSet<NonTerminal>;
 
@@ -379,6 +392,7 @@ impl CFG {
                     return true;
                 },
                 Action::Error => {
+                    //TODO better error reporting
                     return false;
                 }
             }
@@ -495,8 +509,11 @@ mod tests {
         assert_eq!(*m.get( &(q5.clone(), 'S')).unwrap(), Action::Error);
 
         //println!("{:?}", m);
-        //NOT working yet
         assert!(g.lr0_analyse("(a)".to_string()));
+        assert!(g.lr0_analyse("((a))".to_string()));
+        assert!(g.lr0_analyse("(((((a)))))".to_string()));
+
+        assert!(!g.lr0_analyse("(a".to_string()));
     }
 }
 
