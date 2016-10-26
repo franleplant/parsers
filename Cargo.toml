@@ -1,5 +1,5 @@
 [package]
-name = "syntaxis_cfg"
+name = "parsers"
 version = "0.2.0"
 authors = ["Fran Guijarro <franleplant@gmail.com>"]
 

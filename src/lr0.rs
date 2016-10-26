@@ -3,49 +3,44 @@ use std::collections::{BTreeSet, BTreeMap};
 use super::cfg::CFG;
 
 //TODO
-// - improve parser data structures and helper methods such as stack
-//      and items, we need a proper interface for derefing and printing
-//      and manipulating them in general
 // - more tests with different grammars
-//
-//
 //
 
 const END_CHAR: char = '$';
 const FALSE_S: char = 'Ś';
 
-type Terminal = char;
-type TerminalSet = BTreeSet<Terminal>;
-type NonTerminal = char;
-type NonTerminalSet = BTreeSet<NonTerminal>;
+pub type Terminal = char;
+pub type TerminalSet = BTreeSet<Terminal>;
+pub type NonTerminal = char;
+pub type NonTerminalSet = BTreeSet<NonTerminal>;
 
-type Derivation = Vec<char>;
-type Production = (NonTerminal, Derivation);
-type Productions = Vec<Production>;
+pub type Derivation = Vec<char>;
+pub type Production = (NonTerminal, Derivation);
+pub type Productions = Vec<Production>;
 
-type ProductionIndex = usize;
-type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
+pub type ProductionIndex = usize;
+pub type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
 
-type DotIndex = usize;
-type DerefedItem = (ProductionIndex, NonTerminal, Derivation, DotIndex, Option<char>);
-type Item = (ProductionIndex, DotIndex);
-type Items = BTreeSet<Item>;
-type State = Items;
+pub type DotIndex = usize;
+pub type DerefedItem = (ProductionIndex, NonTerminal, Derivation, DotIndex, Option<char>);
+pub type Item = (ProductionIndex, DotIndex);
+pub type Items = BTreeSet<Item>;
+pub type State = Items;
 
-type ActionMatrix = BTreeMap<(Items, char), Action>;
+pub type ActionMatrix = BTreeMap<(Items, char), Action>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum StackSymbol {
+pub enum StackSymbol {
     State(Items),
     VN(NonTerminal),
     VT(Terminal),
 }
 
-type Stack = Vec<StackSymbol>;
+pub type Stack = Vec<StackSymbol>;
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Action {
+pub enum Action {
     Shift(Items),
     Reduce(ProductionIndex),
     Accept,
@@ -53,7 +48,7 @@ enum Action {
 }
 
 #[derive(Clone, Debug)]
-struct LR0 {
+pub struct LR0 {
     grammar: CFG,
     stack: Stack,
     pub action_matrix: ActionMatrix,
