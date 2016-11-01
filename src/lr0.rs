@@ -1,25 +1,9 @@
 use std::collections::{BTreeSet, BTreeMap};
 //use std::fmt;
-use super::cfg::CFG;
-
-//TODO
-// - more tests with different grammars
-//
+use super::cfg::{CFG, NonTerminal, Derivation, ProductionIndex};
 
 const END_CHAR: char = '$';
 const FALSE_S: char = 'Ś';
-
-pub type Terminal = char;
-pub type TerminalSet = BTreeSet<Terminal>;
-pub type NonTerminal = char;
-pub type NonTerminalSet = BTreeSet<NonTerminal>;
-
-pub type Derivation = Vec<char>;
-pub type Production = (NonTerminal, Derivation);
-pub type Productions = Vec<Production>;
-
-pub type ProductionIndex = usize;
-pub type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
 
 pub type DotIndex = usize;
 pub type DerefedItem = (ProductionIndex, NonTerminal, Derivation, DotIndex, Option<char>);
@@ -28,15 +12,7 @@ pub type Items = BTreeSet<Item>;
 pub type State = Items;
 
 pub type ActionMatrix = BTreeMap<(Items, char), Action>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StackSymbol {
-    State(Items),
-    VN(NonTerminal),
-    VT(Terminal),
-}
-
-pub type Stack = Vec<StackSymbol>;
+pub type Stack = Vec<State>;
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -179,7 +155,6 @@ impl LR0 {
         (q0, k)
     }
 
-    // TODO improve name
     fn non_terminal_items(&self, items: &Items) -> Items {
         items.iter().cloned().filter(| item | {
             let (_, _, _, _, right_symbol) = self.deref_item(&item);
@@ -237,17 +212,9 @@ impl LR0 {
         (prod_index, nt, derivation.clone(), dot_index, right_symbol)
     }
 
-    fn stacktop(&self) -> StackSymbol {
+    fn stacktop(&self) -> State {
         self.stack[self.stack.len() - 1].clone()
     }
-
-    fn stacktop_state(&self) -> State {
-        match self.stacktop() {
-            StackSymbol::State(state) => state.clone(),
-            _ => panic!("Ouch error"),
-        }
-    }
-
 
     fn next_action(&self, state: State, x: char, next_state: State) -> Action {
         if self.is_accept_state(&state) && x == END_CHAR {
@@ -343,46 +310,32 @@ impl LR0 {
         }
 
         let mut derivations = vec!();
-        self.stack = vec!(StackSymbol::State(self.q0.clone()));
+        self.stack = vec!(self.q0.clone());
 
         let chain: Vec<char> = format!("{}{}", w, END_CHAR).chars().collect();
 
         let mut index = 0;
         while index < chain.len() {
-            let stack_top = self.stacktop_state();
+            let stack_top = self.stacktop();
 
             let tc = chain[index];
-            //println!("stack {:?}", self.stack);
-            //println!("tc {:?}", tc);
             let action = self.action_matrix.get( &(stack_top.clone(), tc) ).unwrap();
-            //println!("action {:?}", action);
-            //println!("====");
-
             match *action {
                 Action::Shift(ref q) => {
-                    if self.grammar.is_nonterminal(&tc) {
-                        self.stack.push(StackSymbol::VN(tc));
-                    } else if self.grammar.is_terminal(&tc) {
-                        self.stack.push(StackSymbol::VT(tc));
-                    }
-
-                    self.stack.push(StackSymbol::State(q.clone()));
+                    self.stack.push(q.clone());
                     index = index + 1;
                 },
                 Action::Reduce(prod_index) => {
                     let (nt, ref derivation) = self.grammar.prod_vec[prod_index];
-                    let len = 2 * derivation.len();
 
-                    for _ in 0..len {
+                    for _ in 0..derivation.len() {
                         match self.stack.pop() {
                             None => return false,
                             _ => {},
                         }
                     }
 
-                    let stack_top = self.stacktop_state();
-
-                    self.stack.push(StackSymbol::VN(nt));
+                    let stack_top = self.stacktop();
 
                     let next_action = self.action_matrix.get( &(stack_top, nt) ).expect("no null goto transitions");
                     let q = match *next_action {
@@ -391,7 +344,7 @@ impl LR0 {
                         _ => panic!("Expected Action::Shift but found {:?}", next_action),
                     };
 
-                    self.stack.push(StackSymbol::State(q.clone()));
+                    self.stack.push(q.clone());
                     derivations.push( (nt, derivation) );
                 },
                 Action::Accept => {
@@ -404,24 +357,9 @@ impl LR0 {
                 },
                 Action::Error => {
                     println!("Parse Error {:?}, {}", self.stack, w);
-                    //let r_stack: Stack = self.stack.iter().cloned().filter(| symbol | {
-                        //match *symbol {
-                            //StackSymbol::VN(_) => true,
-                            //StackSymbol::VT(_) => true,
-                            //_ => false,
-                        //}
-                    //}).collect();
 
-                    //println!("REDUCED STACK {:?}", r_stack);
-
-                    let len = self.stack.len();
-                    for i in (0..len).rev() {
-                        //println!("navigating stack {:?}", self.stack[i]);
-                        if let StackSymbol::State(ref state) = self.stack[i] {
-                            println!("expected {:?} found {:?} in {}", self.expected_symbols(&state), tc, w);
-                            break
-                        }
-                    }
+                    let state = self.stack.pop().unwrap();
+                    println!("expected {:?} found {:?} in {}", self.expected_symbols(&state), tc, w);
                     // In here we can grab the for example ( S and search for right hand side
                     // derivations inside productions that start or contains perhaps that and
                     // basing on that we can do something like "expected ) found nothing"

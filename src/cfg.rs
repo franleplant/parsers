@@ -1,20 +1,20 @@
 use std::collections::{BTreeSet, BTreeMap};
 //use std::fmt;
 
-type Terminal = char;
-type TerminalSet = BTreeSet<Terminal>;
+pub type Terminal = char;
+pub type TerminalSet = BTreeSet<Terminal>;
 // TODO make nonterminal a string, this will require some changes
 // with terminal and deriviation
 // TODO: reconsider this since we can create a map from chars to proper names
-type NonTerminal = char;
-type NonTerminalSet = BTreeSet<NonTerminal>;
+pub type NonTerminal = char;
+pub type NonTerminalSet = BTreeSet<NonTerminal>;
 
-type Derivation = Vec<char>;
-type Production = (NonTerminal, Derivation);
-type Productions = Vec<Production>;
+pub type Derivation = Vec<char>;
+pub type Production = (NonTerminal, Derivation);
+pub type Productions = Vec<Production>;
 
-type ProductionIndex = usize;
-type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
+pub type ProductionIndex = usize;
+pub type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
 
 #[derive(Clone, Debug)]
 pub struct CFG {
