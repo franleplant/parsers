@@ -408,7 +408,9 @@ impl LR0 {
                     derivations.push( (nt.clone(), derivation) );
                 },
                 Action::Accept => {
-                    println!("Accepted {:?}", chain);
+                    let w: Vec<String> = chain.iter().map(|t| t.into()).collect();
+                    let w: String = w.join("");
+                    println!("Accepted {:?}", w);
                     for (nt, derivation) in derivations {
                         println!("Reducing by {:?} -> {:?}", nt, derivation);
                     }
@@ -416,11 +418,13 @@ impl LR0 {
                     return true;
                 },
                 Action::Error => {
-                    println!("Parse Error {:?}, {:?}", self.stack, chain);
+                    let w: Vec<String> = chain.iter().map(|t| t.into()).collect();
+                    let w: String = w.join("");
+                    println!("Parse Error {:?}, {:?}", self.stack, w);
 
                     let state = self.stack.pop().unwrap();
                     let token_type: Symbol = token.into();
-                    println!("expected {:?} found {:?} in {:?}", self.expected_symbols(&state), token_type, chain);
+                    println!("expected {:?} found {:?} in {:?}", self.expected_symbols(&state), token_type, w);
                     // In here we can grab the for example ( S and search for right hand side
                     // derivations inside productions that start or contains perhaps that and
                     // basing on that we can do something like "expected ) found nothing"
