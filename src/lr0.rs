@@ -38,6 +38,26 @@ impl<'a> From<&'a Token> for String {
     }
 }
 
+pub trait Tokenizable {
+    fn get_tokens(&self) -> Vec<Token>;
+}
+
+
+impl<'a> Tokenizable for &'a str {
+    fn get_tokens(&self) -> Vec<Token> {
+        self.clone().to_string().chars()
+            .map(|c| c.to_string())
+            .map(|s| Token::from_type(s))
+            .collect()
+    }
+}
+
+impl Tokenizable for Vec<Token> {
+    fn get_tokens(&self) -> Vec<Token> {
+        self.clone()
+    }
+}
+
 pub type DotIndex = usize;
 pub type DerefedItem = (ProductionIndex, Symbol, Derivation, DotIndex, Option<Symbol>);
 pub type Item = (ProductionIndex, DotIndex);
@@ -119,6 +139,8 @@ impl LR0 {
 
         parser.action_matrix = parser.calc_action_matrix();
 
+        println!("MATRIX {:?}", parser.action_matrix);
+
 
         parser
     }
@@ -128,13 +150,15 @@ impl LR0 {
         let mut marked = set!();
 
         while marked != self.non_terminal_items(&closure) {
-            for item in closure.clone().iter() {
+            println!("closure {:?}", closure);
+            for item in self.non_terminal_items(&closure).clone().iter() {
                 if marked.contains(&item) {
                     continue;
                 }
 
                 marked.insert(item.clone());
 
+                println!("NONTERMINALITEMS {:?}", self.deref_item(&item));
                 // In here we should have productions of the form
                 // A -> a.Bb
                 let (_, _, _, _, right_symbol) = self.deref_item(&item);
@@ -271,11 +295,23 @@ impl LR0 {
         self.stack[self.stack.len() - 1].clone()
     }
 
+    // TODO we need to operate on item base
+    // TODO improve the definitions of this conditionals
+    // i.e. instead of is_accept_state do something like
+    // state.contains( final_item )
+    // where final_item = (0, 1)
+    // TODO improve this method
     fn next_action(&self, state: State, x: Symbol, next_state: State) -> Action {
+        // TODO this is ok because the definition says that if the end item belongs to State
+        // then you can accept
         if self.is_accept_state(&state) && x == self.eow {
             return Action::Accept;
         }
 
+        // TODO this two conditions are important
+        // there might be a shift and a reduce in the same place
+        // which will give us the shift/reduce conflict
+        // work on this
         if !next_state.is_empty() {
             return Action::Shift(next_state)
         }
@@ -356,7 +392,9 @@ impl LR0 {
     // this is likely necessary to simplify the out points of the existing parse,
     // perhaps we could accomplish the same with smart `break` and single out point for the whole
     // function
-    pub fn parse(&mut self, mut chain: Vec<Token>) -> bool {
+    pub fn parse<T: Tokenizable>(&mut self, chain: T) -> bool {
+
+        let mut chain = chain.get_tokens();
         let mut state_names = BTreeMap::new();
         let ref k = self.k;
         let iter = k.iter().enumerate();
@@ -455,7 +493,7 @@ mod tests {
     #[test]
     fn simple_grammar() {
         use cfg::CFG;
-        use super::{Action, LR0, Token};
+        use super::{Action, LR0};
 
         let vn = set!("S");
         let vt = set!("a", "(", ")");
@@ -520,11 +558,11 @@ mod tests {
         assert_eq!(*m.get( &(q5.clone(), "$".to_string())).unwrap(), Action::Reduce(1));
         assert_eq!(*m.get( &(q5.clone(), "S".to_string())).unwrap(), Action::Error);
 
-        assert!(parser.parse( Token::from_str("(a)") ));
-        assert!(parser.parse( Token::from_str("((a))") ));
-        assert!(parser.parse( Token::from_str("(((((a)))))") ));
+        assert!(parser.parse( "(a)" ));
+        assert!(parser.parse( "((a))" ));
+        assert!(parser.parse( "(((((a)))))" ));
 
-        assert!(!parser.parse( Token::from_str("(a") ));
+        assert!(!parser.parse( "(a" ));
     }
 }
 

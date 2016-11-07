@@ -1,7 +1,7 @@
 #[macro_use] extern crate parsers;
 
 use parsers::cfg::CFG;
-use parsers::lr0::{LR0, Token};
+use parsers::lr0::{LR0};
 
 #[test]
 fn expressions_grammar() {
@@ -21,20 +21,20 @@ fn expressions_grammar() {
 
     let mut parser = LR0::new(g);
 
-    assert!(parser.parse( Token::from_str("i*i")));
-    assert!(parser.parse( Token::from_str("(i*i)")));
+    assert!(parser.parse( "i*i" ));
+    assert!(parser.parse( "(i*i)" ));
 
-    assert!(parser.parse( Token::from_str("i+i")));
-    assert!(parser.parse( Token::from_str("(i+i)")));
+    assert!(parser.parse( "i+i" ));
+    assert!(parser.parse( "(i+i)" ));
 
-    assert!(parser.parse( Token::from_str("i*i+i")));
-    assert!(parser.parse( Token::from_str("(i*i)+i")));
-    assert!(parser.parse( Token::from_str("i*(i+i)")));
-    assert!(parser.parse( Token::from_str("(i*i+i)")));
+    assert!(parser.parse( "i*i+i" ));
+    assert!(parser.parse( "(i*i)+i" ));
+    assert!(parser.parse( "i*(i+i)" ));
+    assert!(parser.parse( "(i*i+i)" ));
 
 
-    assert!(!parser.parse( Token::from_str("i*")));
-    assert!(!parser.parse( Token::from_str("iiiii")));
-    assert!(!parser.parse( Token::from_str("i*****")));
+    assert!(!parser.parse( "i*" ));
+    assert!(!parser.parse( "iiiii" ));
+    assert!(!parser.parse( "i*****" ));
 }
 
