@@ -1,47 +1,49 @@
 use std::collections::{BTreeSet, BTreeMap};
-//use std::fmt;
+use std::fmt::{Debug};
 
-pub type Terminal = char;
-pub type TerminalSet = BTreeSet<Terminal>;
-// TODO make nonterminal a string, this will require some changes
-// with terminal and deriviation
-// TODO: reconsider this since we can create a map from chars to proper names
-pub type NonTerminal = char;
-pub type NonTerminalSet = BTreeSet<NonTerminal>;
+pub type Symbol = String;
+pub type Set<T> = BTreeSet<T>;
 
-pub type Derivation = Vec<char>;
-pub type Production = (NonTerminal, Derivation);
+pub type Derivation = Vec<Symbol>;
+pub type GenericDerivation<T> = Vec<T>;
+pub type Production = (Symbol, Derivation);
 pub type Productions = Vec<Production>;
+pub type GenericProductions<T> = Vec<(T, GenericDerivation<T>)>;
 
 pub type ProductionIndex = usize;
-pub type ProductionMap = BTreeMap<NonTerminal, Vec<ProductionIndex>>;
+pub type ProductionMap = BTreeMap<Symbol, Vec<ProductionIndex>>;
 
 #[derive(Clone, Debug)]
 pub struct CFG {
-    pub vn: NonTerminalSet,
-    pub vt: TerminalSet,
+    pub vn: Set<Symbol>,
+    pub vt: Set<Symbol>,
     pub prod_map: ProductionMap,
     pub prod_vec: Productions,
-    pub s: NonTerminal,
+    pub s: Symbol,
 }
 
 
 impl CFG {
-    pub fn new(vn: NonTerminalSet, vt: TerminalSet, prod_vec: Productions, s: NonTerminal) -> CFG {
+    pub fn new<T: Into<String> + Debug + Ord + Clone>(vn: Set<T>, vt: Set<T>, prod_vec: GenericProductions<T>, s: T) -> CFG {
         let mut prod_map: ProductionMap = BTreeMap::new();
+        let vn: Set<Symbol> = vn.iter().cloned().map(|el| el.into()).collect();
+        let vt: Set<Symbol> = vt.iter().cloned().map(|el| el.into()).collect();
+        let prod_vec: Productions = prod_vec.iter().cloned()
+            .map(|(nt, der)| (nt.into(), der.iter().cloned().map(|el| el.into()).collect()) ).collect();
+
 
         assert!(vn.is_disjoint(&vt), "VN and VT must be disjoint.\nVN: {:?} \nVT: {:?}", vn, vt);
 
         let len = prod_vec.len();
 
         for i in 0..len {
-            let (nt, ref derivation) = prod_vec[i];
-            assert!(vn.contains(&nt), "NonTerminal in production rule does not belong to VN {:?} -> {:?} \n {:?}", nt, derivation, vn);
+            let (ref nt, ref derivation) = prod_vec[i];
+            assert!(vn.contains(nt), "NonTerminal in production rule does not belong to VN {:?} -> {:?} \n {:?}", nt, derivation, vn);
             for c in derivation {
-                assert!(vn.contains(&c) || vt.contains(&c), "Char in derivation {:?} -> {:?} does not belong to VN or VT {:?}", nt, derivation, c);
+                assert!(vn.contains(c) || vt.contains(c), "Char in derivation {:?} -> {:?} does not belong to VN or VT {:?}", nt, derivation, c);
             }
 
-            prod_map.entry(nt).or_insert(vec!()).push( i );
+            prod_map.entry(nt.clone()).or_insert(vec!()).push( i );
         }
 
         CFG {
@@ -49,19 +51,19 @@ impl CFG {
             vt: vt,
             prod_map: prod_map,
             prod_vec: prod_vec,
-            s: s,
+            s: s.into(),
         }
     }
 
-    pub fn get_v(&self) -> BTreeSet<char> {
+    pub fn get_v(&self) -> BTreeSet<Symbol> {
         self.vt.union(&self.vn).cloned().collect()
     }
 
-    pub fn is_terminal(&self, x: &char) -> bool {
+    pub fn is_terminal(&self, x: &Symbol) -> bool {
         self.vt.contains(x)
     }
 
-    pub fn is_nonterminal(&self, x: &char) -> bool {
+    pub fn is_nonterminal(&self, x: &Symbol) -> bool {
         self.vn.contains(x)
     }
 }
@@ -92,97 +94,21 @@ impl CFG {
 //}
 
 
-
-
-
-//fn derivation_to_string(der: &Derivation) -> String {
-    //let mut der_string = String::new();
-    //for e in der {
-        //match *e {
-            //V::T(t) => der_string.push(t),
-            //V::N(nt) => der_string.push(nt),
-            //_ => {},
-        //}
-    //}
-
-    //der_string
-//}
-
-
 #[cfg(test)]
 mod tests {
     #[test]
     fn cfg_new_test() {
-        use super::{CFG, NonTerminalSet, TerminalSet, NonTerminal, Productions};
+        use super::{CFG};
 
-        let vn: NonTerminalSet = set!('S');
-        let vt: TerminalSet = set!('a', '(', ')');
-        let s: NonTerminal = 'S';
-        let p: Productions = vec![
-            ('S', vec!['(', 'S', ')'] ),
-            ('S', vec!['a'] )
+        let vn = set!("S");
+        let vt = set!("a", "(", ")");
+        let s = "S";
+        let p = vec![
+            ("S", vec!["(", "S", ")"] ),
+            ("S", vec!["a"] )
         ];
 
         let g = CFG::new(vn, vt, p, s);
         println!("Resulted grammar {:?}", g);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-        //let q0 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((0, 0));
-            //aux.insert((1, 0));
-            //aux.insert((2, 0));
-            //aux
-        //};
-
-
-        //let q1 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((0, 1));
-            //aux
-        //};
-
-        //let q2 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 0));
-            //aux.insert((1, 1));
-            //aux.insert((2, 0));
-            //aux
-        //};
-
-        //let q3 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((2, 1));
-            //aux
-        //};
-
-        //let q4 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 2));
-            //aux
-        //};
-
-        //let q5 = {
-            //use std::collections::{BTreeSet};
-            //let mut aux = BTreeSet::new();
-            //aux.insert((1, 3));
-            //aux
-        //};
