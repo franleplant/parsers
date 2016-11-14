@@ -3,7 +3,9 @@
 use parsers::cfg::CFG;
 use parsers::lr0::{LR0};
 
+// this grammar is slr0 after all :(
 #[test]
+#[should_panic]
 fn expressions_grammar() {
     let vn = set!("E", "T", "F");
     let vt = set!("+", "*", "(", ")", "i");

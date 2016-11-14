@@ -1,5 +1,5 @@
 use std::collections::{BTreeSet, BTreeMap};
-//use std::fmt;
+use std::fmt;
 use super::cfg::{CFG, Symbol, Derivation, ProductionIndex};
 use std::convert::From;
 
@@ -90,6 +90,7 @@ pub struct LR0 {
 }
 
 
+
 impl LR0 {
     pub fn new(grammar: CFG) -> LR0 {
         let false_s = FALSE_S.to_string();
@@ -139,8 +140,7 @@ impl LR0 {
 
         parser.action_matrix = parser.calc_action_matrix();
 
-        println!("MATRIX {:?}", parser.action_matrix);
-
+        println!("{}", parser);
 
         parser
     }
@@ -150,7 +150,6 @@ impl LR0 {
         let mut marked = set!();
 
         while marked != self.non_terminal_items(&closure) {
-            println!("closure {:?}", closure);
             for item in self.non_terminal_items(&closure).clone().iter() {
                 if marked.contains(&item) {
                     continue;
@@ -158,7 +157,6 @@ impl LR0 {
 
                 marked.insert(item.clone());
 
-                println!("NONTERMINALITEMS {:?}", self.deref_item(&item));
                 // In here we should have productions of the form
                 // A -> a.Bb
                 let (_, _, _, _, right_symbol) = self.deref_item(&item);
@@ -251,30 +249,19 @@ impl LR0 {
 
 
 
-    fn get_complete_item(&self, items: &Items) -> Option<Item> {
-        for item in items {
-            let (_, _, derivation, dot_index, _) = self.deref_item(&item);
-            if derivation.len() == dot_index {
-                return Some(item.clone())
-            }
-        }
-
-        None
-    }
-
-    fn is_accept_state(&self, items: &Items) -> bool {
-        for item in items {
-            let (_, nt, _, _, right_symbol) = self.deref_item(&item);
-            if let Some(right_symbol) = right_symbol {
-                if nt == self.false_s && right_symbol == self.eow {
+    fn get_complete_items(&self, items: &Items) -> Vec<Item> {
+        items.iter()
+            .cloned()
+            .filter(|item| {
+                let (_, _, derivation, dot_index, _) = self.deref_item(&item);
+                if derivation.len() == dot_index {
                     return true;
                 }
-            }
-        }
 
-        false
+                false
+            })
+            .collect()
     }
-
 
     pub fn deref_item(&self, item: &Item) -> DerefedItem {
         let &(prod_index, dot_index) = item;
@@ -295,35 +282,31 @@ impl LR0 {
         self.stack[self.stack.len() - 1].clone()
     }
 
-    // TODO we need to operate on item base
-    // TODO improve the definitions of this conditionals
-    // i.e. instead of is_accept_state do something like
-    // state.contains( final_item )
-    // where final_item = (0, 1)
-    // TODO improve this method
-    fn next_action(&self, state: State, x: Symbol, next_state: State) -> Action {
-        // TODO this is ok because the definition says that if the end item belongs to State
-        // then you can accept
-        if self.is_accept_state(&state) && x == self.eow {
-            return Action::Accept;
+    fn next_actions(&self, state: &State, x: &Symbol, next_state: &State) -> Vec<Action> {
+        let mut actions = vec![];
+
+        let final_item = (0, 1);
+        if state.contains(&final_item) && *x == self.eow {
+            return vec![Action::Accept];
         }
 
-        // TODO this two conditions are important
-        // there might be a shift and a reduce in the same place
-        // which will give us the shift/reduce conflict
-        // work on this
+
         if !next_state.is_empty() {
-            return Action::Shift(next_state)
+            actions.push(Action::Shift(next_state.clone()));
         }
 
-        if let Some(item) = self.get_complete_item(&state) {
+        for item in self.get_complete_items(state) {
             let (prod_index, nt, _, _, _) = self.deref_item(&item);
-            if nt != self.false_s  && !self.grammar.is_nonterminal(&x) {
-                return Action::Reduce(prod_index);
+            if nt != self.false_s  && !self.grammar.is_nonterminal(x) {
+                actions.push(Action::Reduce(prod_index));
             }
         }
 
-        Action::Error
+        if actions.len() > 0 {
+            return actions;
+        }
+
+        vec![Action::Error]
     }
 
     // TODO to have even better error reporting I could calculate something like
@@ -347,8 +330,6 @@ impl LR0 {
             .collect()
     }
 
-    // TODO we should have in account reduction redution or shift reduction
-    // conflicts in this matrix as in lr1 g
     pub fn calc_action_matrix(&self) -> ActionMatrix {
         let v = self.grammar.get_v();
         let mut action: ActionMatrix = BTreeMap::new();
@@ -358,19 +339,20 @@ impl LR0 {
         for x in v {
             for state in k {
                 let key = (state.clone(), x.clone());
-                let old_value = action.get(&key).cloned();
                 let next_state = self.goto(&state, x.clone());
+                let values = self.next_actions(state, &x, &next_state);
 
-                let value = self.next_action(state.clone(), x.clone(), next_state);
-
-                // TODO do something else instead of printing error
-                if let Some(old_value) = old_value {
-                    if value != old_value {
-                        // then we are trying to add a new value
-                        println!("Trying to push a new value to the action matrix");
-                        println!("action({:?}, {:?}), new value {:?} old value {:?}", state, x, value, old_value);
+                // In here we check if we have any conflicts
+                let value = match values.len() {
+                    0 => panic!("Something went wrong"),
+                    1 => values[0].clone(),
+                    _ => {
+                        panic!(
+                            "shift/reduce conflict found! {:?} -> {:?}\n{}",
+                            (self.items_to_string(&state), x.clone()),
+                            values, self);
                     }
-                }
+                };
 
                 action.insert(key, value);
             }
@@ -482,10 +464,58 @@ impl LR0 {
         }
         false
     }
+
+
+
+    pub fn item_to_string(&self, item: &Item) -> String {
+        let (_, nt, mut der, dot_index, _) = self.deref_item(&item);
+
+        let der = {
+            der.insert(dot_index, ".".to_string());
+            der.join("")
+        };
+        format!("{} -> {}", nt, der)
+    }
+
+    pub fn items_to_string(&self, items: &Items) -> BTreeSet<String> {
+        items.iter().cloned().map(|el| self.item_to_string(&el)).collect()
+    }
+
+    pub fn k_to_string(&self) -> BTreeSet<BTreeSet<String>> {
+        self.k.iter().cloned().map(|el| self.items_to_string(&el)).collect()
+    }
 }
 
 
 
+impl fmt::Display for LR0 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n\n").unwrap();
+        write!(f, "LR0 \n").unwrap();
+        write!(f, "==================== \n").unwrap();
+        write!(f, "K: \n", ).unwrap();
+        let k = self.k_to_string();
+        for state in k {
+            write!(f, "{:?} \n", state).unwrap();
+        }
+        write!(f, "q0: {:?} \n", self.items_to_string(&self.q0)).unwrap();
+        //write!(f, "Grammar: {:?} \n", self.grammar).unwrap();
+        write!(f, "Stack: {:?}\n", self.stack).unwrap();
+        write!(f, "Matrix: \n").unwrap();
+        for (key, value) in self.action_matrix.iter() {
+            let &(ref state, ref symbol) = key;
+            let state = self.items_to_string(state);
+            write!(f, "{:?}, {} -> {:?} \n", state, symbol, value).unwrap();
+        }
+        //for (nt, dervec) in &self.p {
+            //for der in dervec {
+                //let der_string = derivation_to_string(der);
+            //}
+        //}
+
+        write!(f, "\n")
+    }
+}
 
 
 #[cfg(test)]
