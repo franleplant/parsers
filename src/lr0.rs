@@ -179,13 +179,13 @@ impl LR0 {
         closure
     }
 
-    fn goto(&self, items: &State, x: Symbol) -> State {
+    fn goto(&self, items: &State, x: &Symbol) -> State {
         let mut ret_items = set!();
 
         for item in items {
             let (prod_index, _, derivation, dot_index, right_symbol) = self.deref_item(&item);
             if let Some(right_symbol) = right_symbol {
-                if right_symbol != x {
+                if right_symbol != *x {
                     continue
                 }
 
@@ -221,7 +221,7 @@ impl LR0 {
                         continue;
                     }
 
-                    let next_state = self.goto(&state, x);
+                    let next_state = self.goto(&state, &x);
                     if !next_state.is_empty() {
                         k.insert(next_state);
                     }
@@ -332,34 +332,33 @@ impl LR0 {
 
     pub fn calc_action_matrix(&self) -> ActionMatrix {
         let v = self.grammar.get_v();
-        let mut action: ActionMatrix = BTreeMap::new();
-        let ref k = self.k;
+        let mut action_matrix = BTreeMap::new();
 
 
-        for x in v {
-            for state in k {
+        for x in &v {
+            for state in &self.k {
                 let key = (state.clone(), x.clone());
-                let next_state = self.goto(&state, x.clone());
-                let values = self.next_actions(state, &x, &next_state);
+                let next_state = self.goto(state, x);
+                let actions = self.next_actions(state, x, &next_state);
 
                 // In here we check if we have any conflicts
-                let value = match values.len() {
+                let action = match actions.len() {
                     0 => panic!("Something went wrong"),
-                    1 => values[0].clone(),
+                    1 => actions[0].clone(),
                     _ => {
                         panic!(
                             "shift/reduce conflict found! {:?} -> {:?}\n{}",
-                            (self.items_to_string(&state), x.clone()),
-                            values, self);
+                            (self.items_to_string(&state), x),
+                            actions, self);
                     }
                 };
 
-                action.insert(key, value);
+                action_matrix.insert(key, action);
             }
         }
 
 
-        action
+        action_matrix
     }
 
 
