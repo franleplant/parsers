@@ -347,8 +347,8 @@ impl LR0 {
                     1 => actions[0].clone(),
                     _ => {
                         panic!(
-                            "shift/reduce conflict found! {:?} -> {:?}\n{}",
-                            (self.items_to_string(&state), x),
+                            "shift/reduce conflict found! \nCurrentState {:?}\nInput {:?} \nActions {:?}\n{}",
+                            self.items_to_string(&state), x,
                             actions, self);
                     }
                 };
