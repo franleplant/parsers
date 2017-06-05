@@ -68,7 +68,7 @@ pub type Item = (ProductionIndex, DotIndex);
 pub type Items = BTreeSet<Item>;
 pub type State = Items;
 
-pub type ActionMatrix = BTreeMap<(Items, Symbol), Action>;
+pub type ActionMatrix = BTreeMap<(Items, Symbol), Vec<Action>>;
 pub type Stack = Vec<State>;
 
 
@@ -89,6 +89,7 @@ pub struct LR0 {
     k: BTreeSet<State>,
     false_s: Symbol,
     eow: Symbol,
+    errors: Vec<String>,
     // TODO maybe store shortcut names for the states, et all
 
 }
@@ -135,6 +136,7 @@ impl LR0 {
             stack: vec!(),
             false_s: false_s,
             eow: eow,
+            errors: vec![],
         };
 
 
@@ -142,9 +144,15 @@ impl LR0 {
         parser.q0 = q0;
         parser.k = k;
 
-        parser.action_matrix = parser.calc_action_matrix();
+        let (action_matrix, errors) = parser.calc_action_matrix();
+        parser.action_matrix = action_matrix;
+        parser.errors = errors;
 
         println!("{}", parser);
+
+        if parser.errors.len() > 0 {
+            panic!("Aborting: errors found in the creation of the parser");
+        }
 
         parser
     }
@@ -325,7 +333,7 @@ impl LR0 {
         v.iter().cloned()
             .map(| x | (x.clone(), self.action_matrix.get( &(state.clone(), x) ).unwrap()) )
             .filter(| &(_, action) | {
-                match *action {
+                match action[0] {
                     Action::Error => false,
                     _ => true
                 }
@@ -334,10 +342,12 @@ impl LR0 {
             .collect()
     }
 
-    pub fn calc_action_matrix(&self) -> ActionMatrix {
+    pub fn calc_action_matrix(&self) -> (ActionMatrix, Vec<String>) {
         let v = self.grammar.get_v();
         let mut action_matrix = BTreeMap::new();
 
+
+        let mut errors = vec![];
 
         for x in &v {
             for state in &self.k {
@@ -346,23 +356,27 @@ impl LR0 {
                 let actions = self.next_actions(state, x, &next_state);
 
                 // In here we check if we have any conflicts
-                let action = match actions.len() {
-                    0 => panic!("Something went wrong"),
-                    1 => actions[0].clone(),
+                match actions.len() {
+                    0 => {
+                        errors.push(format!("Something went wrong"));
+                    },
+                    1 => {},
                     _ => {
-                        panic!(
+                        let error = format!(
                             "shift/reduce conflict found! \nCurrentState {:?}\nInput {:?} \nActions {:?}\n{}",
                             self.items_to_string(&state), x,
                             actions, self);
+
+                        errors.push(error);
                     }
                 };
 
-                action_matrix.insert(key, action);
+                action_matrix.insert(key, actions);
             }
         }
 
 
-        action_matrix
+        (action_matrix, errors)
     }
 
 
@@ -402,7 +416,7 @@ impl LR0 {
             let ref token: Token = chain[index];
             let action = self.action_matrix.get( &(stack_top.clone(), token.into()) ).unwrap();
 
-            match *action {
+            match action[0] {
                 Action::Shift(ref q) => {
                     self.stack.push(q.clone());
                     index = index + 1;
@@ -421,7 +435,7 @@ impl LR0 {
                     let stack_top = self.stacktop();
                     let next_action = self.action_matrix.get( &(stack_top, nt.clone()) ).expect("no null goto transitions");
 
-                    let q = match *next_action {
+                    let q = match next_action[0] {
                         Action::Shift(ref q) => q.clone(),
                         // TODO should this be a rejected scenario?
                         _ => panic!("Expected Action::Shift but found {:?}", next_action),
@@ -493,29 +507,58 @@ impl LR0 {
 
 impl fmt::Display for LR0 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+
+        // TODO move this into the praser struct so we can do smarter error reporting with this
+        // information
+        let mut k_for_print: BTreeMap<&Items, usize> = BTreeMap::new();
+        for (i, k) in self.k.iter().enumerate() {
+            k_for_print.insert(k, i);
+        }
+
+
         write!(f, "\n\n").unwrap();
         write!(f, "LR0 \n").unwrap();
         write!(f, "==================== \n").unwrap();
+        write!(f, "Q0:\n{:?} \n", self.items_to_string(&self.q0)).unwrap();
         write!(f, "K: \n", ).unwrap();
-        let k = self.k_to_string();
-        for state in k {
-            write!(f, "{:?} \n", state).unwrap();
+
+        {
+            for (k_items, index) in &k_for_print {
+                let k_string = self.items_to_string(k_items);
+                write!(f, "Q{:<4} {:?} \n", index, k_string).unwrap();
+            }
         }
-        write!(f, "q0: {:?} \n", self.items_to_string(&self.q0)).unwrap();
+
         //write!(f, "Grammar: {:?} \n", self.grammar).unwrap();
         write!(f, "Stack: {:?}\n", self.stack).unwrap();
         write!(f, "Matrix: \n").unwrap();
-        for (key, value) in self.action_matrix.iter() {
-            let &(ref state, ref symbol) = key;
-            let state = self.items_to_string(state);
-            write!(f, "{:?}, {} -> {:?} \n", state, symbol, value).unwrap();
-        }
-        //for (nt, dervec) in &self.p {
-            //for der in dervec {
-                //let der_string = derivation_to_string(der);
-            //}
-        //}
+        for (key, actions) in self.action_matrix.iter() {
+            let &(ref state_items, ref symbol) = key;
+            let state_index = k_for_print.get(state_items).expect("Oops, key not found while printing the parser");
 
+            let mut actions_str = vec![];
+            for action in actions {
+
+                // TODO abstract into actions_to_string
+                let action_str = match action {
+                    &Action::Shift(ref next_state_items) => {
+                        let state_index = k_for_print.get(next_state_items).expect("Oops, key not found while printing the parser");
+                        format!("Shift(Q{})", state_index)
+                    },
+                    &Action::Reduce(prod_index) => {
+                        let (ref nt, ref der) = self.grammar.prod_vec[prod_index];
+                        format!("Reduce({} -> {})", nt, der.join(""))
+                    },
+                    _ => format!("{:?}", action)
+                };
+
+                actions_str.push(action_str);
+            }
+
+            write!(f, "Q{:?}, {} -> {:?} \n", state_index, symbol, actions_str).unwrap();
+        }
+
+        write!(f, "Errors: {:?}\n", self.errors).unwrap();
         write!(f, "\n")
     }
 }
@@ -555,41 +598,41 @@ mod tests {
 
         assert_eq!(k, k_expected, "should assemble the right state set");
 
-        assert_eq!(*m.get( &(q0.clone(), "(".to_string())).unwrap(), Action::Shift(q2.clone()));
-        assert_eq!(*m.get( &(q0.clone(), "a".to_string())).unwrap(), Action::Shift(q3.clone()));
-        assert_eq!(*m.get( &(q0.clone(), ")".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q0.clone(), "$".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q0.clone(), "S".to_string())).unwrap(), Action::Shift(q1.clone()));
+        assert_eq!(m.get( &(q0.clone(), "(".to_string())).unwrap()[0], Action::Shift(q2.clone()));
+        assert_eq!(m.get( &(q0.clone(), "a".to_string())).unwrap()[0], Action::Shift(q3.clone()));
+        assert_eq!(m.get( &(q0.clone(), ")".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q0.clone(), "$".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q0.clone(), "S".to_string())).unwrap()[0], Action::Shift(q1.clone()));
 
-        assert_eq!(*m.get( &(q1.clone(), "(".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q1.clone(), "a".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q1.clone(), ")".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q1.clone(), "$".to_string())).unwrap(), Action::Accept);
-        assert_eq!(*m.get( &(q1.clone(), "S".to_string())).unwrap(), Action::Error);
+        assert_eq!(m.get( &(q1.clone(), "(".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q1.clone(), "a".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q1.clone(), ")".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q1.clone(), "$".to_string())).unwrap()[0], Action::Accept);
+        assert_eq!(m.get( &(q1.clone(), "S".to_string())).unwrap()[0], Action::Error);
 
-        assert_eq!(*m.get( &(q2.clone(), "(".to_string())).unwrap(), Action::Shift(q2.clone()));
-        assert_eq!(*m.get( &(q2.clone(), "a".to_string())).unwrap(), Action::Shift(q3.clone()));
-        assert_eq!(*m.get( &(q2.clone(), ")".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q2.clone(), "$".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q2.clone(), "S".to_string())).unwrap(), Action::Shift(q4.clone()));
+        assert_eq!(m.get( &(q2.clone(), "(".to_string())).unwrap()[0], Action::Shift(q2.clone()));
+        assert_eq!(m.get( &(q2.clone(), "a".to_string())).unwrap()[0], Action::Shift(q3.clone()));
+        assert_eq!(m.get( &(q2.clone(), ")".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q2.clone(), "$".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q2.clone(), "S".to_string())).unwrap()[0], Action::Shift(q4.clone()));
 
-        assert_eq!(*m.get( &(q3.clone(), "(".to_string())).unwrap(), Action::Reduce(2));
-        assert_eq!(*m.get( &(q3.clone(), "a".to_string())).unwrap(), Action::Reduce(2));
-        assert_eq!(*m.get( &(q3.clone(), ")".to_string())).unwrap(), Action::Reduce(2));
-        assert_eq!(*m.get( &(q3.clone(), "$".to_string())).unwrap(), Action::Reduce(2));
-        assert_eq!(*m.get( &(q3.clone(), "S".to_string())).unwrap(), Action::Error);
+        assert_eq!(m.get( &(q3.clone(), "(".to_string())).unwrap()[0], Action::Reduce(2));
+        assert_eq!(m.get( &(q3.clone(), "a".to_string())).unwrap()[0], Action::Reduce(2));
+        assert_eq!(m.get( &(q3.clone(), ")".to_string())).unwrap()[0], Action::Reduce(2));
+        assert_eq!(m.get( &(q3.clone(), "$".to_string())).unwrap()[0], Action::Reduce(2));
+        assert_eq!(m.get( &(q3.clone(), "S".to_string())).unwrap()[0], Action::Error);
 
-        assert_eq!(*m.get( &(q4.clone(), "(".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q4.clone(), "a".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q4.clone(), ")".to_string())).unwrap(), Action::Shift(q5.clone()));
-        assert_eq!(*m.get( &(q4.clone(), "$".to_string())).unwrap(), Action::Error);
-        assert_eq!(*m.get( &(q4.clone(), "S".to_string())).unwrap(), Action::Error);
+        assert_eq!(m.get( &(q4.clone(), "(".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q4.clone(), "a".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q4.clone(), ")".to_string())).unwrap()[0], Action::Shift(q5.clone()));
+        assert_eq!(m.get( &(q4.clone(), "$".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get( &(q4.clone(), "S".to_string())).unwrap()[0], Action::Error);
 
-        assert_eq!(*m.get( &(q5.clone(), "(".to_string())).unwrap(), Action::Reduce(1));
-        assert_eq!(*m.get( &(q5.clone(), "a".to_string())).unwrap(), Action::Reduce(1));
-        assert_eq!(*m.get( &(q5.clone(), ")".to_string())).unwrap(), Action::Reduce(1));
-        assert_eq!(*m.get( &(q5.clone(), "$".to_string())).unwrap(), Action::Reduce(1));
-        assert_eq!(*m.get( &(q5.clone(), "S".to_string())).unwrap(), Action::Error);
+        assert_eq!(m.get( &(q5.clone(), "(".to_string())).unwrap()[0], Action::Reduce(1));
+        assert_eq!(m.get( &(q5.clone(), "a".to_string())).unwrap()[0], Action::Reduce(1));
+        assert_eq!(m.get( &(q5.clone(), ")".to_string())).unwrap()[0], Action::Reduce(1));
+        assert_eq!(m.get( &(q5.clone(), "$".to_string())).unwrap()[0], Action::Reduce(1));
+        assert_eq!(m.get( &(q5.clone(), "S".to_string())).unwrap()[0], Action::Error);
 
         assert!(parser.parse( "(a)" ));
         assert!(parser.parse( "((a))" ));
