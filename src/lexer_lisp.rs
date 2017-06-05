@@ -19,6 +19,7 @@ pub enum TokenType {
 }
 
 //TODO can this Token type be generic on the _type ?
+//TODO becareful, lr0/Token is incompatible with this Token str
 #[derive(Clone, Debug)]
 pub struct Token {
     _type: TokenType,
@@ -36,6 +37,12 @@ impl Token {
             value: String::new(),
         }
     }
+
+    pub fn get_type(&self) -> String {
+        let type_str = format!("{:?}", self._type);
+        type_str
+    }
+
     ////pub fn from_type(_type: Symbol) -> Token {
         ////Token {
             ////_type: _type,
@@ -49,9 +56,6 @@ impl Token {
             ////.collect()
     ////}
 
-    ////pub fn get_type(&self) -> Symbol {
-        ////self._type.clone()
-    ////}
 }
 
 
@@ -108,7 +112,7 @@ impl Lexer {
 
             println!("c {:?}", c);
             println!("index {:?}", self.index);
-            println!("tokens {:?}", tokens);
+            //println!("tokens {:?}", tokens);
 
             if c == '\n' {
                 self.index += 1;
