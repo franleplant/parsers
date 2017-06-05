@@ -3,11 +3,6 @@ use std::fmt;
 use super::cfg::{CFG, Symbol, Derivation, ProductionIndex};
 use std::convert::From;
 
-//TODO
-//- create a nice nick name for composed states and used them to display the resulting table
-//- print the whole table in a nice way, even if there are conflicts
-//- move the conflict checker to after the whole table is calculated (is it possible?)
-
 const EOW: &'static str = "$";
 const FALSE_S: &'static str = "Ś";
 

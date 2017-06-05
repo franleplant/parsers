@@ -1,0 +1,9 @@
+(define (myfn x y) (
+  (if (> x y)
+    x
+    y)
+))
+
+(myfn 2 4)
+
+(and true false)
