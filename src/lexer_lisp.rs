@@ -62,6 +62,7 @@ pub struct Lexer {
     line: usize,
     chars: Vec<char>,
     len: usize,
+    line_offset: usize,
 }
 
 impl Lexer {
@@ -76,27 +77,43 @@ impl Lexer {
             len: len,
             line: 0,
             index: 0,
+            line_offset: 0,
         }
     }
+
+    fn user_col(&self) -> usize {
+        self.index - self.line_offset + 1
+    }
+
+    fn user_line(&self) -> usize {
+        self.line + 1
+    }
+
+
 
     pub fn get_tokens(&mut self) -> Vec<Token> {
         let mut end = false;
         let mut tokens = vec![];
 
         while !end {
-            println!("index {:?}", self.index);
-            println!("tokens {:?}", tokens);
             if self.index >= self.len {
                 end = true;
                 continue;
             }
 
+
             let c = self.chars[self.index];
-            println!("c {}", c);
+            let line = self.user_line();
+            let col = self.user_col();
+
+            println!("c {:?}", c);
+            println!("index {:?}", self.index);
+            println!("tokens {:?}", tokens);
 
             if c == '\n' {
                 self.index += 1;
                 self.line += 1;
+                self.line_offset = self.index;
                 continue;
             }
 
@@ -105,15 +122,14 @@ impl Lexer {
                 continue;
             }
 
-
             if c == '(' {
-                tokens.push(Token::new(TokenType::ParOpen, self.line + 1, 0));
+                tokens.push(Token::new(TokenType::ParOpen, line, col));
                 self.index += 1;
                 continue;
             }
 
             if c == ')' {
-                tokens.push(Token::new(TokenType::ParClose, self.line + 1, 0));
+                tokens.push(Token::new(TokenType::ParClose, line, col));
                 self.index += 1;
                 continue;
             }
@@ -125,8 +141,8 @@ impl Lexer {
                 let token = Token {
                     _type: TokenType::Opmat,
                     value: value,
-                    line: self.line + 1,
-                    col: 0,
+                    line: line,
+                    col: col,
                 };
 
                 tokens.push(token);
@@ -150,8 +166,8 @@ impl Lexer {
                 let token = Token {
                     _type: TokenType::Oprel,
                     value: value,
-                    line: self.line + 1,
-                    col: 0,
+                    line: line,
+                    col: col,
                 };
 
                 tokens.push(token);
@@ -164,8 +180,8 @@ impl Lexer {
                 let token = Token {
                     _type: TokenType::Oprel,
                     value: c.to_string(),
-                    line: self.line + 1,
-                    col: 0,
+                    line: line,
+                    col: col,
                 };
 
                 tokens.push(token);
@@ -198,13 +214,12 @@ impl Lexer {
 
                 let token = Token {
                     _type: _type,
-                    line: self.line + 1,
-                    col: 0,
                     value: value,
+                    line: line,
+                    col: col,
                 };
 
                 tokens.push(token);
-                //self.index += 1;
                 continue;
             }
 
@@ -220,9 +235,9 @@ impl Lexer {
 
                 let token = Token {
                     _type: TokenType::Number,
-                    line: self.line + 1,
-                    col: 0,
                     value: value,
+                    line: line,
+                    col: col,
                 };
 
                 tokens.push(token);
