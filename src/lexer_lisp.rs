@@ -110,8 +110,8 @@ impl Lexer {
             let line = self.user_line();
             let col = self.user_col();
 
-            println!("c {:?}", c);
-            println!("index {:?}", self.index);
+            //println!("c {:?}", c);
+            //println!("index {:?}", self.index);
             //println!("tokens {:?}", tokens);
 
             if c == '\n' {
@@ -198,7 +198,6 @@ impl Lexer {
                 let mut value = String::new();
                 let mut c = c;
                 while c.is_alphabetic() {
-                    println!("{:?} {}", self.index, c);
                     value.push(c);
                     self.index += 1;
                     c = self.chars[self.index];
@@ -231,7 +230,6 @@ impl Lexer {
                 let mut value = String::new();
                 let mut c = c;
                 while c.is_numeric() {
-                    println!("{:?} {}", self.index, c);
                     value.push(c);
                     self.index += 1;
                     c = self.chars[self.index];
@@ -259,6 +257,21 @@ impl Lexer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trivial() {
+        let mut lexer = Lexer::new("".to_string());
+        let tokens = lexer.get_tokens();
+        assert_eq!(tokens.len(), 0);
+
+        let mut lexer = Lexer::new("true".to_string());
+        let tokens = lexer.get_tokens();
+        assert_eq!(tokens.len(), 1);
+
+        let mut lexer = Lexer::new("()".to_string());
+        let tokens = lexer.get_tokens();
+        assert_eq!(tokens.len(), 2);
+    }
 
     #[test]
     fn lex1() {
