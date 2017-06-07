@@ -7,3 +7,5 @@
 (myfn 2 4)
 
 (and true false)
+
+("a string 123 true false")

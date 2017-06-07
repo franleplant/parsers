@@ -1,4 +1,5 @@
 
+
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub enum TokenType {
     Oprel,
@@ -15,6 +16,7 @@ pub enum TokenType {
     And,
     Or,
     Not,
+    String,
     Define,
 }
 
@@ -67,6 +69,7 @@ pub struct Lexer {
     chars: Vec<char>,
     len: usize,
     line_offset: usize,
+    separator_expected: bool,
 }
 
 impl Lexer {
@@ -82,6 +85,7 @@ impl Lexer {
             line: 0,
             index: 0,
             line_offset: 0,
+            separator_expected: false,
         }
     }
 
@@ -95,14 +99,12 @@ impl Lexer {
 
 
 
-    pub fn get_tokens(&mut self) -> Vec<Token> {
-        let mut end = false;
+    pub fn get_tokens(&mut self) -> Result<Vec<Token>, String> {
         let mut tokens = vec![];
 
-        while !end {
+        loop {
             if self.index >= self.len {
-                end = true;
-                continue;
+                return Ok(tokens)
             }
 
 
@@ -118,23 +120,27 @@ impl Lexer {
                 self.index += 1;
                 self.line += 1;
                 self.line_offset = self.index;
+                self.separator_expected = false;
                 continue;
             }
 
             if c.is_whitespace() {
                 self.index += 1;
+                self.separator_expected = false;
                 continue;
             }
 
             if c == '(' {
                 tokens.push(Token::new(TokenType::ParOpen, line, col));
                 self.index += 1;
+                self.separator_expected = false;
                 continue;
             }
 
             if c == ')' {
                 tokens.push(Token::new(TokenType::ParClose, line, col));
                 self.index += 1;
+                self.separator_expected = false;
                 continue;
             }
 
@@ -152,6 +158,7 @@ impl Lexer {
                 tokens.push(token);
 
                 self.index += 1;
+                self.separator_expected = false;
                 continue;
             }
 
@@ -177,6 +184,7 @@ impl Lexer {
                 tokens.push(token);
 
                 self.index += 1;
+                self.separator_expected = false;
                 continue;
             }
 
@@ -191,6 +199,44 @@ impl Lexer {
                 tokens.push(token);
 
                 self.index += 1;
+                self.separator_expected = false;
+                continue;
+            }
+
+            if c == '"' {
+                let mut value = String::new();
+                let mut c = c;
+                let mut first_delimiter = true;
+
+                loop {
+                    value.push(c);
+                    self.index += 1;
+
+                    if !first_delimiter && c == '"' {
+                        break;
+                    }
+
+                    first_delimiter = false;
+                    if self.index >= self.len {
+                        return Err(format!("ERROR, unterminated string {} in line {} col {}", value, line, col));
+                    }
+                    c = self.chars[self.index];
+                }
+
+                if self.separator_expected {
+                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
+                }
+
+                self.separator_expected = true;
+
+                let token = Token {
+                    _type: TokenType::String,
+                    value: value,
+                    line: line,
+                    col: col,
+                };
+
+                tokens.push(token);
                 continue;
             }
 
@@ -215,6 +261,12 @@ impl Lexer {
                     _ => TokenType::Id,
                 };
 
+                if self.separator_expected {
+                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
+                }
+
+                self.separator_expected = true;
+
                 let token = Token {
                     _type: _type,
                     value: value,
@@ -235,6 +287,12 @@ impl Lexer {
                     c = self.chars[self.index];
                 }
 
+                if self.separator_expected {
+                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
+                }
+
+                self.separator_expected = true;
+
                 let token = Token {
                     _type: TokenType::Number,
                     value: value,
@@ -242,13 +300,13 @@ impl Lexer {
                     col: col,
                 };
 
+
                 tokens.push(token);
                 continue;
             }
+
+            return Err(format!("ERROR, unexpected token"));
         }
-
-
-        tokens
     }
 }
 
@@ -261,15 +319,15 @@ mod tests {
     #[test]
     fn trivial() {
         let mut lexer = Lexer::new("".to_string());
-        let tokens = lexer.get_tokens();
+        let tokens = lexer.get_tokens().unwrap();
         assert_eq!(tokens.len(), 0);
 
         let mut lexer = Lexer::new("true".to_string());
-        let tokens = lexer.get_tokens();
+        let tokens = lexer.get_tokens().unwrap();
         assert_eq!(tokens.len(), 1);
 
         let mut lexer = Lexer::new("()".to_string());
-        let tokens = lexer.get_tokens();
+        let tokens = lexer.get_tokens().unwrap();
         assert_eq!(tokens.len(), 2);
     }
 
@@ -285,12 +343,32 @@ mod tests {
 
 
         let mut lexer = Lexer::new(content.clone());
-        let tokens = lexer.get_tokens();
+        let tokens = lexer.get_tokens().unwrap();
 
         println!("{:?}", content);
         for t in tokens {
             let type_str = format!("{:?}", t._type);
             println!("{:<10} {:<10} {:<10} {:<10}", type_str, t.value, t.line, t.col);
         }
+    }
+
+
+    #[test]
+    #[should_panic]
+    fn error() {
+        let mut lexer = Lexer::new("asd123".to_string());
+        lexer.get_tokens().map_err(|err| println!("{}", err)).unwrap();
+
+        let mut lexer = Lexer::new("123asd".to_string());
+        lexer.get_tokens().map_err(|err| println!("{}", err)).unwrap();
+
+        let mut lexer = Lexer::new("\"asd".to_string());
+        lexer.get_tokens().map_err(|err| println!("{}", err)).unwrap();
+
+        let mut lexer = Lexer::new("\"".to_string());
+        lexer.get_tokens().map_err(|err| println!("{}", err)).unwrap();
+
+        let mut lexer = Lexer::new("123\"asd".to_string());
+        lexer.get_tokens().map_err(|err| println!("{}", err)).unwrap();
     }
 }
