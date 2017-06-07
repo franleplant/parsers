@@ -166,8 +166,12 @@ impl Lexer {
                 let mut value = String::new();
                 value.push(c);
 
-                //TODO EOF error prevention
-                let c_next = self.chars[self.index + 1];
+                // EOF error prevention
+                let next_index = self.index + 1;
+                if next_index >= self.len {
+                    return Err(format!("ERROR, unexpected end of file in line {} col {}", line, col));
+                }
+                let c_next = self.chars[next_index];
                 if c_next == '=' {
                     value.push(c_next);
                     self.index += 1;
