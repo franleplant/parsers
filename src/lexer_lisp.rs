@@ -1,7 +1,4 @@
 
-// TODO
-// - create a tuple view of the Tokens array for easier testing
-
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub enum TokenType {
     Oprel,
@@ -77,14 +74,6 @@ impl Lexer {
         }
 
     }
-
-    //fn separators() -> [char] {
-        //[
-            //'\n',
-            //''
-        //]
-        
-    //}
 
     fn user_col(&self) -> usize {
         self.index - self.line_offset + 1
