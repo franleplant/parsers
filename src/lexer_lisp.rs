@@ -1,4 +1,6 @@
 
+// TODO
+// - create a tuple view of the Tokens array for easier testing
 
 #[derive(Debug, Clone, Ord, Eq, PartialEq, PartialOrd)]
 pub enum TokenType {
@@ -44,20 +46,6 @@ impl Token {
         let type_str = format!("{:?}", self._type);
         type_str
     }
-
-    ////pub fn from_type(_type: Symbol) -> Token {
-        ////Token {
-            ////_type: _type,
-        ////}
-    ////}
-
-    ////pub fn from_str(s: &str) -> Vec<Token> {
-        ////s.clone().to_string().chars()
-            ////.map(|c| c.to_string())
-            ////.map(|s| Token::from_type(s))
-            ////.collect()
-    ////}
-
 }
 
 
@@ -87,7 +75,16 @@ impl Lexer {
             line_offset: 0,
             separator_expected: false,
         }
+
     }
+
+    //fn separators() -> [char] {
+        //[
+            //'\n',
+            //''
+        //]
+        
+    //}
 
     fn user_col(&self) -> usize {
         self.index - self.line_offset + 1
@@ -95,6 +92,35 @@ impl Lexer {
 
     fn user_line(&self) -> usize {
         self.line + 1
+    }
+
+    fn is_separator(c: char) -> bool {
+        match c {
+            '\n' | '(' | ')' | '+' | '*' | '^' | '-' | '/' | '<' | '>' | '=' => {
+                true
+            },
+            _ if c.is_whitespace() => {
+                true
+            },
+            _ => {
+                false
+            }
+        }
+    }
+
+    fn get_char(&self) -> (char, Option<char>) {
+        assert!(self.index < self.len, "get_char: trying to access out of bound char");
+        let c = self.chars[self.index];
+        let c_next = {
+            let next_index = self.index + 1;
+            if next_index < self.len {
+                Some(self.chars[next_index])
+            } else {
+                None
+            }
+        };
+
+        (c, c_next)
     }
 
 
@@ -108,208 +134,139 @@ impl Lexer {
             }
 
 
-            let c = self.chars[self.index];
+            let (c, c_next) = self.get_char();
             let line = self.user_line();
             let col = self.user_col();
-
-            //println!("c {:?}", c);
-            //println!("index {:?}", self.index);
-            //println!("tokens {:?}", tokens);
-
-            if c == '\n' {
-                self.index += 1;
-                self.line += 1;
-                self.line_offset = self.index;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c.is_whitespace() {
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == '(' {
-                tokens.push(Token::new(TokenType::ParOpen, line, col));
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == ')' {
-                tokens.push(Token::new(TokenType::ParClose, line, col));
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == '+' || c == '*' || c == '^' || c == '-' || c == '/' {
-
-                let mut value = String::new();
-                value.push(c);
-                let token = Token {
-                    _type: TokenType::Opmat,
-                    value: value,
-                    line: line,
-                    col: col,
-                };
-
-                tokens.push(token);
-
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == '<' || c == '>' {
-                let mut value = String::new();
-                value.push(c);
-
-                // EOF error prevention
-                let next_index = self.index + 1;
-                if next_index >= self.len {
-                    return Err(format!("ERROR, unexpected end of file in line {} col {}", line, col));
-                }
-                let c_next = self.chars[next_index];
-                if c_next == '=' {
-                    value.push(c_next);
-                    self.index += 1;
-                }
+            let mut value = String::new();
+            let mut token_type: Option<TokenType> = None;
 
 
-                let token = Token {
-                    _type: TokenType::Oprel,
-                    value: value,
-                    line: line,
-                    col: col,
-                };
+            println!("c {:?}", c);
+            println!("index {:?}", self.index);
+            println!("tokens {:?}", tokens);
+            match c {
+                '\n' => {
+                    self.line += 1;
+                    self.line_offset = self.index + 1;
+                },
+                _ if c.is_whitespace() => {},
 
-                tokens.push(token);
+                '(' => token_type = Some(TokenType::ParOpen),
+                ')' => token_type = Some(TokenType::ParClose),
 
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == '=' {
-                let token = Token {
-                    _type: TokenType::Oprel,
-                    value: c.to_string(),
-                    line: line,
-                    col: col,
-                };
-
-                tokens.push(token);
-
-                self.index += 1;
-                self.separator_expected = false;
-                continue;
-            }
-
-            if c == '"' {
-                let mut value = String::new();
-                let mut c = c;
-                let mut first_delimiter = true;
-
-                loop {
+                '+' | '*' | '^' | '-' | '/' => {
+                    token_type = Some(TokenType::Opmat);
                     value.push(c);
-                    self.index += 1;
+                },
+                '<' | '>' => {
+                    token_type = Some(TokenType::Oprel);
+                    value.push(c);
 
-                    if !first_delimiter && c == '"' {
-                        break;
+                    // EOF error prevention
+                    let next_index = self.index + 1;
+                    if next_index >= self.len {
+                        return Err(format!("ERROR, unexpected end of file in line {} col {}", line, col));
+                    }
+                    let c_next = self.chars[next_index];
+                    if c_next == '=' {
+                        value.push(c_next);
+                        self.index += 1;
                     }
 
-                    first_delimiter = false;
-                    if self.index >= self.len {
-                        return Err(format!("ERROR, unterminated string {} in line {} col {}", value, line, col));
+
+                },
+                '=' => {
+                    token_type = Some(TokenType::Oprel);
+                    value.push(c);
+                },
+
+                '"' => {
+                    token_type = Some(TokenType::String);
+                    let mut c = c;
+                    let mut first_delimiter = true;
+
+                    loop {
+                        value.push(c);
+                        if !first_delimiter && c == '"' {
+                            break;
+                        }
+                        first_delimiter = false;
+
+                        if self.index >= self.len {
+                            return Err(format!("ERROR, unterminated string {} in line {} col {}", value, line, col));
+                        }
+
+                        self.index += 1;
+                        c = self.chars[self.index];
                     }
-                    c = self.chars[self.index];
+                },
+                _ if c.is_alphabetic() => {
+                    loop {
+                        let (c, c_next) = self.get_char();
+                        value.push(c);
+                        if let Some(next) = c_next {
+                            if !next.is_alphabetic() {
+                                break;
+                            }
+                            self.index += 1;
+                        } else {
+                            break;
+                        }
+
+                    }
+
+                    let _type = match value.as_str() {
+                        "define" => TokenType::Define,
+                        "if" => TokenType::If,
+                        "true" => TokenType::Bool,
+                        "false" => TokenType::Bool,
+                        "set" => TokenType::Set,
+                        "or" => TokenType::Or,
+                        "not" => TokenType::Not,
+                        "and" => TokenType::And,
+                        _ => TokenType::Id,
+                    };
+
+                    token_type = Some(_type);
+                },
+                _ if c.is_numeric() => {
+                    token_type = Some(TokenType::Number);
+                    loop {
+                        let (c, c_next) = self.get_char();
+                        value.push(c);
+                        if let Some(next) = c_next {
+                            if !next.is_alphabetic() {
+                                break;
+                            }
+                            self.index += 1;
+                        } else {
+                            break;
+                        }
+
+                    }
+
                 }
-
-                if self.separator_expected {
-                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
-                }
-
-                self.separator_expected = true;
-
-                let token = Token {
-                    _type: TokenType::String,
-                    value: value,
-                    line: line,
-                    col: col,
-                };
-
-                tokens.push(token);
-                continue;
+                _ => {
+                    return Err(format!("ERROR, unexpected token"));
+                },
             }
 
-            if c.is_alphabetic() {
-                let mut value = String::new();
-                let mut c = c;
-                while c.is_alphabetic() {
-                    value.push(c);
-                    self.index += 1;
-                    c = self.chars[self.index];
-                }
+            if self.separator_expected && !Lexer::is_separator(c) {
+                return Err(format!("ERROR, separator expected in {} in line {} col {}", value, line, col));
+            }
 
-                let _type = match value.as_str() {
-                    "define" => TokenType::Define,
-                    "if" => TokenType::If,
-                    "true" => TokenType::Bool,
-                    "false" => TokenType::Bool,
-                    "set" => TokenType::Set,
-                    "or" => TokenType::Or,
-                    "not" => TokenType::Not,
-                    "and" => TokenType::And,
-                    _ => TokenType::Id,
-                };
+            self.separator_expected = !Lexer::is_separator(c);
 
-                if self.separator_expected {
-                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
-                }
+            self.index += 1;
 
-                self.separator_expected = true;
-
-                let token = Token {
+            if let Some(_type) = token_type {
+                tokens.push(Token {
                     _type: _type,
                     value: value,
                     line: line,
                     col: col,
-                };
-
-                tokens.push(token);
-                continue;
+                });
             }
-
-            if c.is_numeric() {
-                let mut value = String::new();
-                let mut c = c;
-                while c.is_numeric() {
-                    value.push(c);
-                    self.index += 1;
-                    c = self.chars[self.index];
-                }
-
-                if self.separator_expected {
-                    return Err(format!("ERROR, unexpected token {} in line {} col {}", value, line, col));
-                }
-
-                self.separator_expected = true;
-
-                let token = Token {
-                    _type: TokenType::Number,
-                    value: value,
-                    line: line,
-                    col: col,
-                };
-
-
-                tokens.push(token);
-                continue;
-            }
-
-            return Err(format!("ERROR, unexpected token"));
         }
     }
 }
