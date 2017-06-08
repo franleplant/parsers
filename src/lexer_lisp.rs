@@ -60,10 +60,7 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new(source: String) -> Lexer {
-        let mut chars = source.chars().collect::<Vec<char>>();
-        // TODO try to remove this
-        // Assure that the end of a file is a line feed
-        chars.push('\n');
+        let chars = source.chars().collect::<Vec<char>>();
         let len = chars.len();
         Lexer {
             source: source,
