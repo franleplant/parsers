@@ -133,8 +133,7 @@ impl Lexer {
                 return Ok(tokens)
             }
 
-
-            let (c, c_next) = self.get_char();
+            let (c, _) = self.get_char();
             let line = self.user_line();
             let col = self.user_col();
             let mut value = String::new();
@@ -182,22 +181,22 @@ impl Lexer {
 
                 '"' => {
                     token_type = Some(TokenType::String);
-                    let mut c = c;
                     let mut first_delimiter = true;
 
+
                     loop {
+                        let (c, _) = self.get_char();
                         value.push(c);
+
                         if !first_delimiter && c == '"' {
                             break;
                         }
                         first_delimiter = false;
 
+                        self.index += 1;
                         if self.index >= self.len {
                             return Err(format!("ERROR, unterminated string {} in line {} col {}", value, line, col));
                         }
-
-                        self.index += 1;
-                        c = self.chars[self.index];
                     }
                 },
                 _ if c.is_alphabetic() => {
