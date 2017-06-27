@@ -13,13 +13,13 @@ pub struct Token {
 
 impl Token {
     pub fn from_type(_type: Symbol) -> Token {
-        Token {
-            _type: _type,
-        }
+        Token { _type: _type }
     }
 
     pub fn from_str(s: &str) -> Vec<Token> {
-        s.clone().to_string().chars()
+        s.clone()
+            .to_string()
+            .chars()
             .map(|c| c.to_string())
             .map(|s| Token::from_type(s))
             .collect()
@@ -44,7 +44,9 @@ pub trait Tokenizable {
 
 impl<'a> Tokenizable for &'a str {
     fn get_tokens(&self) -> Vec<Token> {
-        self.clone().to_string().chars()
+        self.clone()
+            .to_string()
+            .chars()
             .map(|c| c.to_string())
             .map(|s| Token::from_type(s))
             .collect()
@@ -86,7 +88,6 @@ pub struct LR0 {
     eow: Symbol,
     errors: Vec<String>,
     // TODO maybe store shortcut names for the states, et all
-
 }
 
 
@@ -96,8 +97,12 @@ impl LR0 {
         let false_s = FALSE_S.to_string();
         let eow = EOW.to_string();
 
-        assert!(!grammar.is_nonterminal(&false_s), "{} is a special VN and cannot be used", false_s);
-        assert!(!grammar.is_terminal(&eow), "{} is a special VT and cannot be used", eow);
+        assert!(!grammar.is_nonterminal(&false_s),
+                "{} is a special VN and cannot be used",
+                false_s);
+        assert!(!grammar.is_terminal(&eow),
+                "{} is a special VT and cannot be used",
+                eow);
 
 
         let s = false_s.clone();
@@ -116,7 +121,7 @@ impl LR0 {
 
         let prod = {
             let mut prod = grammar.prod_vec.clone();
-            prod.insert(0, (false_s.clone(), vec![grammar.s, eow.clone()]) );
+            prod.insert(0, (false_s.clone(), vec![grammar.s, eow.clone()]));
             prod
         };
 
@@ -128,7 +133,7 @@ impl LR0 {
             k: BTreeSet::new(),
             q0: BTreeSet::new(),
             action_matrix: BTreeMap::new(),
-            stack: vec!(),
+            stack: vec![],
             false_s: false_s,
             eow: eow,
             errors: vec![],
@@ -169,13 +174,15 @@ impl LR0 {
                 let (_, _, _, _, right_symbol) = self.deref_item(&item);
 
                 if let Some(right_symbol) = right_symbol {
-                    assert!(self.grammar.is_nonterminal(&right_symbol), "Ups something went wrong. Expected {} to be a NonTerminal", right_symbol);
+                    assert!(self.grammar.is_nonterminal(&right_symbol),
+                            "Ups something went wrong. Expected {} to be a NonTerminal",
+                            right_symbol);
 
                     // add all productions of the form
                     // B -> any
                     if let Some(prod_indices) = self.grammar.prod_map.get(&right_symbol) {
                         for prod_index in prod_indices {
-                            closure.insert( ( *prod_index, 0) );
+                            closure.insert((*prod_index, 0));
                         }
                     }
                 }
@@ -193,22 +200,22 @@ impl LR0 {
             let (prod_index, _, derivation, dot_index, right_symbol) = self.deref_item(&item);
             if let Some(right_symbol) = right_symbol {
                 if right_symbol != *x {
-                    continue
+                    continue;
                 }
 
                 let next_dot_index = dot_index + 1;
                 if next_dot_index <= derivation.len() {
-                    ret_items.insert( (prod_index, next_dot_index) );
+                    ret_items.insert((prod_index, next_dot_index));
                 }
             }
         }
 
-        self.closure( &ret_items )
+        self.closure(&ret_items)
     }
 
     pub fn calc_stateset(&self) -> (State, BTreeSet<State>) {
         let v = self.grammar.get_v();
-        let q0 = self.closure( &set!((0, 0)) );
+        let q0 = self.closure(&set!((0, 0)));
 
         let mut k = set!(q0.clone());
         let mut marked = set!();
@@ -240,29 +247,16 @@ impl LR0 {
     }
 
     fn non_terminal_items(&self, items: &Items) -> Items {
-        items.iter().cloned().filter(| item | {
-            let (_, _, _, _, right_symbol) = self.deref_item(&item);
-
-            if let Some(right_symbol) = right_symbol {
-                if self.grammar.is_nonterminal(&right_symbol) {
-                    return true
-                }
-            }
-
-            false
-        })
-        .collect()
-    }
-
-
-
-    fn get_complete_items(&self, items: &Items) -> Vec<Item> {
-        items.iter()
+        items
+            .iter()
             .cloned()
             .filter(|item| {
-                let (_, _, derivation, dot_index, _) = self.deref_item(&item);
-                if derivation.len() == dot_index {
-                    return true;
+                let (_, _, _, _, right_symbol) = self.deref_item(&item);
+
+                if let Some(right_symbol) = right_symbol {
+                    if self.grammar.is_nonterminal(&right_symbol) {
+                        return true;
+                    }
                 }
 
                 false
@@ -270,16 +264,38 @@ impl LR0 {
             .collect()
     }
 
+
+
+    fn get_complete_items(&self, items: &Items) -> Vec<Item> {
+        items
+            .iter()
+            .cloned()
+            .filter(|item| {
+                        let (_, _, derivation, dot_index, _) = self.deref_item(&item);
+                        if derivation.len() == dot_index {
+                            return true;
+                        }
+
+                        false
+                    })
+            .collect()
+    }
+
     pub fn deref_item(&self, item: &Item) -> DerefedItem {
         let &(prod_index, dot_index) = item;
-        assert!(prod_index < self.grammar.prod_vec.len(), "prod index {} out of bound", prod_index);
+        assert!(prod_index < self.grammar.prod_vec.len(),
+                "prod index {} out of bound",
+                prod_index);
         let (ref nt, ref derivation) = self.grammar.prod_vec[prod_index];
-        assert!(dot_index <= derivation.len(), "dot_index {} out of bound in {:?}", dot_index, derivation);
+        assert!(dot_index <= derivation.len(),
+                "dot_index {} out of bound in {:?}",
+                dot_index,
+                derivation);
 
         let right_symbol = if dot_index == derivation.len() {
             None
         } else {
-          Some(derivation[dot_index].clone())
+            Some(derivation[dot_index].clone())
         };
 
         (prod_index, nt.clone(), derivation.clone(), dot_index, right_symbol)
@@ -304,7 +320,7 @@ impl LR0 {
 
         for item in self.get_complete_items(state) {
             let (prod_index, nt, _, _, _) = self.deref_item(&item);
-            if nt != self.false_s  && !self.grammar.is_nonterminal(x) {
+            if nt != self.false_s && !self.grammar.is_nonterminal(x) {
                 actions.push(Action::Reduce(prod_index));
             }
         }
@@ -325,15 +341,14 @@ impl LR0 {
     fn expected_symbols(&self, state: &State) -> BTreeSet<Symbol> {
         let v = self.grammar.get_v();
 
-        v.iter().cloned()
-            .map(| x | (x.clone(), self.action_matrix.get( &(state.clone(), x) ).unwrap()) )
-            .filter(| &(_, action) | {
-                match action[0] {
-                    Action::Error => false,
-                    _ => true
-                }
-            })
-            .map(| (x, _) | x)
+        v.iter()
+            .cloned()
+            .map(|x| (x.clone(), self.action_matrix.get(&(state.clone(), x)).unwrap()))
+            .filter(|&(_, action)| match action[0] {
+                        Action::Error => false,
+                        _ => true,
+                    })
+            .map(|(x, _)| x)
             .collect()
     }
 
@@ -354,13 +369,14 @@ impl LR0 {
                 match actions.len() {
                     0 => {
                         errors.push(format!("Something went wrong"));
-                    },
-                    1 => {},
+                    }
+                    1 => {}
                     _ => {
-                        let error = format!(
-                            "shift/reduce conflict found! \nCurrentState {:?}\nInput {:?} \nActions {:?}\n{}",
-                            self.items_to_string(&state), x,
-                            actions, self);
+                        let error = format!("shift/reduce conflict found! \nCurrentState {:?}\nInput {:?} \nActions {:?}\n{}",
+                                            self.items_to_string(&state),
+                                            x,
+                                            actions,
+                                            self);
 
                         errors.push(error);
                     }
@@ -396,8 +412,8 @@ impl LR0 {
             state_names.insert(state.clone(), format!("q{}", i));
         }
 
-        let mut derivations = vec!();
-        self.stack = vec!(self.q0.clone());
+        let mut derivations = vec![];
+        self.stack = vec![self.q0.clone()];
 
         let chain = {
             chain.push(Token::from_type(self.eow.clone()));
@@ -409,13 +425,15 @@ impl LR0 {
         while index < chain.len() {
             let stack_top = self.stacktop();
             let ref token: Token = chain[index];
-            let action = self.action_matrix.get( &(stack_top.clone(), token.into()) ).unwrap();
+            let action = self.action_matrix
+                .get(&(stack_top.clone(), token.into()))
+                .unwrap();
 
             match action[0] {
                 Action::Shift(ref q) => {
                     self.stack.push(q.clone());
                     index = index + 1;
-                },
+                }
 
                 Action::Reduce(prod_index) => {
                     let (ref nt, ref derivation) = self.grammar.prod_vec[prod_index];
@@ -423,12 +441,14 @@ impl LR0 {
                     for _ in 0..derivation.len() {
                         match self.stack.pop() {
                             None => return false,
-                            _ => {},
+                            _ => {}
                         }
                     }
 
                     let stack_top = self.stacktop();
-                    let next_action = self.action_matrix.get( &(stack_top, nt.clone()) ).expect("no null goto transitions");
+                    let next_action = self.action_matrix
+                        .get(&(stack_top, nt.clone()))
+                        .expect("no null goto transitions");
 
                     let q = match next_action[0] {
                         Action::Shift(ref q) => q.clone(),
@@ -437,8 +457,8 @@ impl LR0 {
                     };
 
                     self.stack.push(q.clone());
-                    derivations.push( (nt.clone(), derivation) );
-                },
+                    derivations.push((nt.clone(), derivation));
+                }
                 Action::Accept => {
                     let w: Vec<String> = chain.iter().map(|t| t.into()).collect();
                     let w: String = w.join("");
@@ -448,7 +468,7 @@ impl LR0 {
                     }
                     // Later we shuld return something more meaninful
                     return true;
-                },
+                }
                 Action::Error => {
                     let w: Vec<String> = chain.iter().map(|t| t.into()).collect();
                     let w: String = w.join("");
@@ -456,7 +476,10 @@ impl LR0 {
 
                     let state = self.stack.pop().unwrap();
                     let token_type: Symbol = token.into();
-                    println!("expected {:?} found {:?} in {:?}", self.expected_symbols(&state), token_type, w);
+                    println!("expected {:?} found {:?} in {:?}",
+                             self.expected_symbols(&state),
+                             token_type,
+                             w);
                     // In here we can grab the for example ( S and search for right hand side
                     // derivations inside productions that start or contains perhaps that and
                     // basing on that we can do something like "expected ) found nothing"
@@ -490,11 +513,19 @@ impl LR0 {
     }
 
     pub fn items_to_string(&self, items: &Items) -> BTreeSet<String> {
-        items.iter().cloned().map(|el| self.item_to_string(&el)).collect()
+        items
+            .iter()
+            .cloned()
+            .map(|el| self.item_to_string(&el))
+            .collect()
     }
 
     pub fn k_to_string(&self) -> BTreeSet<BTreeSet<String>> {
-        self.k.iter().cloned().map(|el| self.items_to_string(&el)).collect()
+        self.k
+            .iter()
+            .cloned()
+            .map(|el| self.items_to_string(&el))
+            .collect()
     }
 }
 
@@ -529,7 +560,9 @@ impl fmt::Display for LR0 {
         write!(f, "Matrix: \n").unwrap();
         for (key, actions) in self.action_matrix.iter() {
             let &(ref state_items, ref symbol) = key;
-            let state_index = k_for_print.get(state_items).expect("Oops, key not found while printing the parser");
+            let state_index = k_for_print
+                .get(state_items)
+                .expect("Oops, key not found while printing the parser");
 
             let mut actions_str = vec![];
             for action in actions {
@@ -537,14 +570,17 @@ impl fmt::Display for LR0 {
                 // TODO abstract into actions_to_string
                 let action_str = match action {
                     &Action::Shift(ref next_state_items) => {
-                        let state_index = k_for_print.get(next_state_items).expect("Oops, key not found while printing the parser");
+                        let state_index =
+                            k_for_print
+                                .get(next_state_items)
+                                .expect("Oops, key not found while printing the parser");
                         format!("Shift(Q{})", state_index)
-                    },
+                    }
                     &Action::Reduce(prod_index) => {
                         let (ref nt, ref der) = self.grammar.prod_vec[prod_index];
                         format!("Reduce({} -> {})", nt, der.join(""))
-                    },
-                    _ => format!("{:?}", action)
+                    }
+                    _ => format!("{:?}", action),
                 };
 
                 actions_str.push(action_str);
@@ -569,10 +605,7 @@ mod tests {
         let vn = set!("S");
         let vt = set!("a", "(", ")");
         let s = "S";
-        let p = vec![
-            ("S", vec!["(", "S", ")"] ),
-            ("S", vec!["a"] )
-        ];
+        let p = vec![("S", vec!["(", "S", ")"]), ("S", vec!["a"])];
 
         let g = CFG::new(vn, vt, p, s);
 
@@ -589,51 +622,85 @@ mod tests {
         let q5 = set!((1, 3));
 
 
-        let k_expected = set!(q0.clone(), q1.clone(), q2.clone(), q3.clone(), q4.clone(), q5.clone());
+        let k_expected = set!(q0.clone(),
+                              q1.clone(),
+                              q2.clone(),
+                              q3.clone(),
+                              q4.clone(),
+                              q5.clone());
 
         assert_eq!(k, k_expected, "should assemble the right state set");
 
-        assert_eq!(m.get( &(q0.clone(), "(".to_string())).unwrap()[0], Action::Shift(q2.clone()));
-        assert_eq!(m.get( &(q0.clone(), "a".to_string())).unwrap()[0], Action::Shift(q3.clone()));
-        assert_eq!(m.get( &(q0.clone(), ")".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q0.clone(), "$".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q0.clone(), "S".to_string())).unwrap()[0], Action::Shift(q1.clone()));
+        assert_eq!(m.get(&(q0.clone(), "(".to_string())).unwrap()[0],
+                   Action::Shift(q2.clone()));
+        assert_eq!(m.get(&(q0.clone(), "a".to_string())).unwrap()[0],
+                   Action::Shift(q3.clone()));
+        assert_eq!(m.get(&(q0.clone(), ")".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q0.clone(), "$".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q0.clone(), "S".to_string())).unwrap()[0],
+                   Action::Shift(q1.clone()));
 
-        assert_eq!(m.get( &(q1.clone(), "(".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q1.clone(), "a".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q1.clone(), ")".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q1.clone(), "$".to_string())).unwrap()[0], Action::Accept);
-        assert_eq!(m.get( &(q1.clone(), "S".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get(&(q1.clone(), "(".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q1.clone(), "a".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q1.clone(), ")".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q1.clone(), "$".to_string())).unwrap()[0],
+                   Action::Accept);
+        assert_eq!(m.get(&(q1.clone(), "S".to_string())).unwrap()[0],
+                   Action::Error);
 
-        assert_eq!(m.get( &(q2.clone(), "(".to_string())).unwrap()[0], Action::Shift(q2.clone()));
-        assert_eq!(m.get( &(q2.clone(), "a".to_string())).unwrap()[0], Action::Shift(q3.clone()));
-        assert_eq!(m.get( &(q2.clone(), ")".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q2.clone(), "$".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q2.clone(), "S".to_string())).unwrap()[0], Action::Shift(q4.clone()));
+        assert_eq!(m.get(&(q2.clone(), "(".to_string())).unwrap()[0],
+                   Action::Shift(q2.clone()));
+        assert_eq!(m.get(&(q2.clone(), "a".to_string())).unwrap()[0],
+                   Action::Shift(q3.clone()));
+        assert_eq!(m.get(&(q2.clone(), ")".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q2.clone(), "$".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q2.clone(), "S".to_string())).unwrap()[0],
+                   Action::Shift(q4.clone()));
 
-        assert_eq!(m.get( &(q3.clone(), "(".to_string())).unwrap()[0], Action::Reduce(2));
-        assert_eq!(m.get( &(q3.clone(), "a".to_string())).unwrap()[0], Action::Reduce(2));
-        assert_eq!(m.get( &(q3.clone(), ")".to_string())).unwrap()[0], Action::Reduce(2));
-        assert_eq!(m.get( &(q3.clone(), "$".to_string())).unwrap()[0], Action::Reduce(2));
-        assert_eq!(m.get( &(q3.clone(), "S".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get(&(q3.clone(), "(".to_string())).unwrap()[0],
+                   Action::Reduce(2));
+        assert_eq!(m.get(&(q3.clone(), "a".to_string())).unwrap()[0],
+                   Action::Reduce(2));
+        assert_eq!(m.get(&(q3.clone(), ")".to_string())).unwrap()[0],
+                   Action::Reduce(2));
+        assert_eq!(m.get(&(q3.clone(), "$".to_string())).unwrap()[0],
+                   Action::Reduce(2));
+        assert_eq!(m.get(&(q3.clone(), "S".to_string())).unwrap()[0],
+                   Action::Error);
 
-        assert_eq!(m.get( &(q4.clone(), "(".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q4.clone(), "a".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q4.clone(), ")".to_string())).unwrap()[0], Action::Shift(q5.clone()));
-        assert_eq!(m.get( &(q4.clone(), "$".to_string())).unwrap()[0], Action::Error);
-        assert_eq!(m.get( &(q4.clone(), "S".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get(&(q4.clone(), "(".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q4.clone(), "a".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q4.clone(), ")".to_string())).unwrap()[0],
+                   Action::Shift(q5.clone()));
+        assert_eq!(m.get(&(q4.clone(), "$".to_string())).unwrap()[0],
+                   Action::Error);
+        assert_eq!(m.get(&(q4.clone(), "S".to_string())).unwrap()[0],
+                   Action::Error);
 
-        assert_eq!(m.get( &(q5.clone(), "(".to_string())).unwrap()[0], Action::Reduce(1));
-        assert_eq!(m.get( &(q5.clone(), "a".to_string())).unwrap()[0], Action::Reduce(1));
-        assert_eq!(m.get( &(q5.clone(), ")".to_string())).unwrap()[0], Action::Reduce(1));
-        assert_eq!(m.get( &(q5.clone(), "$".to_string())).unwrap()[0], Action::Reduce(1));
-        assert_eq!(m.get( &(q5.clone(), "S".to_string())).unwrap()[0], Action::Error);
+        assert_eq!(m.get(&(q5.clone(), "(".to_string())).unwrap()[0],
+                   Action::Reduce(1));
+        assert_eq!(m.get(&(q5.clone(), "a".to_string())).unwrap()[0],
+                   Action::Reduce(1));
+        assert_eq!(m.get(&(q5.clone(), ")".to_string())).unwrap()[0],
+                   Action::Reduce(1));
+        assert_eq!(m.get(&(q5.clone(), "$".to_string())).unwrap()[0],
+                   Action::Reduce(1));
+        assert_eq!(m.get(&(q5.clone(), "S".to_string())).unwrap()[0],
+                   Action::Error);
 
-        assert!(parser.parse( "(a)" ));
-        assert!(parser.parse( "((a))" ));
-        assert!(parser.parse( "(((((a)))))" ));
+        assert!(parser.parse("(a)"));
+        assert!(parser.parse("((a))"));
+        assert!(parser.parse("(((((a)))))"));
 
-        assert!(!parser.parse( "(a" ));
+        assert!(!parser.parse("(a"));
     }
 }
-
